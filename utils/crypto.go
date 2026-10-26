@@ -3,7 +3,10 @@
 package utils
 
 import (
-	"crypto/hmac" "crypto/sha256" "encoding/binary" "fmt"
+	"crypto/hmac" 
+	"crypto/sha256" 
+	"encoding/binary" 
+	"fmt"
 )
 
 const FormatVersion = "v2"
@@ -30,8 +33,10 @@ func Encrypt(algorithm Algorithm, key, macKey, plaintext []byte) (EncryptedData,
 	switch algorithm {
 	case AlgorithmAES256CTR:
 		iv, ciphertext, err = encryptAESCTR(key, plaintext)
-	case AlgorithmDESCTR, AlgorithmRC4:
-		return EncryptedData{}, fmt.Errorf("encryption algorithm %q is insecure for new data", algorithm)
+	case AlgorithmDESCTR:
+		iv, ciphertext, err = encryptDESCTR(key, plaintext)
+	case AlgorithmRC4:
+		ciphertext, err = encryptRC4(key, plaintext)
 	default:
 		return EncryptedData{}, fmt.Errorf("unsupported encryption algorithm %q", algorithm)
 	}
