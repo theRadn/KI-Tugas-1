@@ -36,7 +36,7 @@ func Encrypt(algorithm Algorithm, key, macKey, plaintext []byte) (EncryptedData,
 	case AlgorithmDESCTR:
 		iv, ciphertext, err = encryptDESCTR(key, plaintext)
 	case AlgorithmRC4:
-		ciphertext, err = encryptRC4(key, plaintext)
+		iv, ciphertext, err = encryptRC4(key, plaintext)
 	default:
 		return EncryptedData{}, fmt.Errorf("unsupported encryption algorithm %q", algorithm)
 	}
@@ -70,7 +70,7 @@ func Decrypt(data EncryptedData, key, macKey []byte) ([]byte, error) {
 	case AlgorithmDESCTR:
 		return decryptDESCTR(key, data.IV, data.Ciphertext)
 	case AlgorithmRC4:
-		return decryptRC4(key, data.Ciphertext)
+		return decryptRC4(key, data.IV, data.Ciphertext)
 	}
 	return nil, fmt.Errorf("unsupported encryption algorithm %q", data.Algorithm)
 }
