@@ -15,7 +15,7 @@ type RateLimiters struct {
 	Handshake *middleware.IPRateLimiter
 }
 
-func SetupRoutes(router *gin.Engine, db *gorm.DB, sessionManager *middleware.SessionManager, handshakeController *controller.HandshakeController, berandaController controller.BerandaController, analisisController controller.AnalisisController, limiters RateLimiters) {
+func SetupRoutes(router *gin.Engine, db *gorm.DB, sessionManager *middleware.SessionManager, handshakeController *controller.HandshakeController, berandaController controller.BerandaController, analisisController controller.AnalisisController, videoController *controller.VideoController, limiters RateLimiters) {
 	router.Use(limiters.Global.Middleware())
 
 	api := router.Group("/api")
@@ -32,5 +32,12 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, sessionManager *middleware.Ses
 		RegisterBerkasRoutes(encrypted, db)
 		Beranda(encrypted, berandaController)
 		Analisis(encrypted, analisisController)
+
+		// Video diunggah dan diunduh per potongan (maks 256 KB) agar muat
+		// di amplop enkripsi in-transit.
+		videos := encrypted.Group("/videos", middleware.AuthMiddleware())
+		videos.POST("", videoController.Start)
+		videos.PUT("/:id/chunks/:index", videoController.PutChunk)
+		videos.GET("/:id/chunks/:index", videoController.GetChunk)
 	}
 }
