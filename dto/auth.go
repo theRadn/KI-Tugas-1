@@ -23,3 +23,8 @@ type AuthResponse struct {
 	Token        string `json:"token,omitempty"`
 }
 
+type GantiKataSandiRequest struct {
+    KataSandiLama            string `json:"kata_sandi_lama" binding:"required"`
+    KataSandiBaru             string `json:"kata_sandi_baru" binding:"required,min=8"`
+    KonfirmasiKataSandiBaru  string `json:"konfirmasi_kata_sandi_baru" binding:"required,eqfield=KataSandiBaru"`
+}

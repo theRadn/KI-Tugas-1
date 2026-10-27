@@ -131,3 +131,57 @@ func (c *AuthController) LupaKataSandi(ctx *gin.Context) {
 		"message": "Email ditemukan; fitur reset belum tersedia",
 	})
 }
+
+
+func (c *AuthController) GantiKataSandi(ctx *gin.Context) {
+    var req dto.GantiKataSandiRequest
+
+    if err := ctx.ShouldBindJSON(&req); err != nil {
+        ctx.JSON(http.StatusBadRequest, gin.H{
+            "message": "Data ganti kata sandi tidak valid",
+            "error":   err.Error(),
+        })
+        return
+    }
+
+    // Ambil ID pengguna dari konteks autentikasi.
+    // Nama key harus disesuaikan dengan middleware JWT proyekmu.
+    rawUserID, exists := ctx.Get("userID")
+    if !exists {
+        ctx.JSON(http.StatusUnauthorized, gin.H{
+            "message": "Pengguna belum terautentikasi",
+        })
+        return
+    }
+
+    userID, ok := rawUserID.(uuid.UUID)
+    if !ok {
+        ctx.JSON(http.StatusUnauthorized, gin.H{
+            "message": "Identitas pengguna tidak valid",
+        })
+        return
+    }
+
+    err := c.service.GantiKataSandi(
+        ctx.Request.Context(),
+        userID,
+        req,
+    )
+    if err != nil {
+        if err.Error() == "kata sandi lama tidak sesuai" {
+            ctx.JSON(http.StatusBadRequest, gin.H{
+                "message": err.Error(),
+            })
+            return
+        }
+
+        ctx.JSON(http.StatusInternalServerError, gin.H{
+            "message": "Gagal mengganti kata sandi",
+        })
+        return
+    }
+
+    ctx.JSON(http.StatusOK, gin.H{
+        "message": "Kata sandi berhasil diperbarui",
+    })
+}

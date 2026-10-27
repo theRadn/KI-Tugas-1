@@ -10,6 +10,7 @@ import (
 	"KI-Tugas-1/entity"
 	"KI-Tugas-1/repository"
 
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -121,4 +122,34 @@ func (s *AuthService) LupaKataSandi(
 	// Email ditemukan, tetapi proses pengiriman reset
 	// belum diimplementasikan.
 	return nil
+}
+
+
+func (s *AuthService) GantiKataSandi(
+    ctx context.Context,
+    userID uuid.UUID,
+    req dto.GantiKataSandiRequest,
+) error {
+    user, err := s.repo.FindByID(ctx, userID)
+    if err != nil {
+        return err
+    }
+
+    err = bcrypt.CompareHashAndPassword(
+        []byte(user.KataSandiHash),
+        []byte(req.KataSandiLama),
+    )
+    if err != nil {
+        return errors.New("kata sandi lama tidak sesuai")
+    }
+
+    passwordHash, err := bcrypt.GenerateFromPassword(
+        []byte(req.KataSandiBaru),
+        bcrypt.DefaultCost,
+    )
+    if err != nil {
+        return err
+    }
+
+    return s.repo.UpdatePassword(ctx, userID, string(passwordHash))
 }

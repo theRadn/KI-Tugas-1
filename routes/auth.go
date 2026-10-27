@@ -21,5 +21,6 @@ func RegisterAuthRoutes(router *gin.RouterGroup, db *gorm.DB) {
 		auth.POST("/masuk", authController.Masuk)
 		auth.POST("/keluar", authController.Keluar)
 		auth.POST("/lupa_katasandi", authController.LupaKataSandi)
+		auth.PUT("/ganti-katasandi", authController.GantiKataSandi)
 	}
 }

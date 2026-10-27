@@ -3,10 +3,10 @@ package repository
 
 import (
 	"context"
+    "github.com/google/uuid"
+	"gorm.io/gorm"
 
 	"KI-Tugas-1/entity"
-
-	"gorm.io/gorm"
 )
 
 type AuthRepository struct {
@@ -84,4 +84,26 @@ func (r *AuthRepository) FindByEmail(
 	}
 
 	return &user, nil
+}
+
+
+func (r *AuthRepository) UpdatePassword(
+    ctx context.Context,
+    userID uuid.UUID,
+    passwordHash string,
+) error {
+    result := r.db.WithContext(ctx).
+        Model(&entity.User{}).
+        Where("id = ?", userID).
+        Update("kata_sandi_hash", passwordHash)
+
+    if result.Error != nil {
+        return result.Error
+    }
+
+    if result.RowsAffected == 0 {
+        return gorm.ErrRecordNotFound
+    }
+
+    return nil
 }
