@@ -254,6 +254,25 @@ func (s *DocumentService) Info(userID, documentID uuid.UUID) (string, string, er
 	return manifest.Filename, manifest.ContentType, nil
 }
 
+// CiphertextChunk mengembalikan ciphertext satu potongan dokumen untuk
+// fitur "lihat ciphertext", beserta jumlah potongannya.
+func (s *DocumentService) CiphertextChunk(userID, documentID uuid.UUID, index int, algorithm string) ([]byte, int, error) {
+	manifest, err := s.manifest(userID, documentID)
+	if err != nil {
+		return nil, 0, err
+	}
+	if index < 0 || index >= manifest.ChunkCount {
+		return nil, 0, ErrInvalidDocument
+	}
+	ciphertext, err := ciphertextPotongan(s.chunkPath(userID, documentID, index), algorithm)
+	if errors.Is(err, ErrVideoNotFound) {
+		err = ErrDocumentNotFound
+	} else if errors.Is(err, ErrInvalidVideoChunk) {
+		err = ErrInvalidDocument
+	}
+	return ciphertext, manifest.ChunkCount, err
+}
+
 // Lengkap bernilai true bila semua potongan sudah tersimpan.
 func (s *DocumentService) Lengkap(userID, documentID uuid.UUID) (bool, error) {
 	manifest, err := s.manifest(userID, documentID)

@@ -153,6 +153,19 @@ func (d *DocumentController) GetChunk(c *gin.Context) {
 	})
 }
 
+func (d *DocumentController) GetCiphertext(c *gin.Context) {
+	userID, documentID, index, ok := documentParams(c)
+	if !ok {
+		return
+	}
+	ciphertext, count, err := d.service.CiphertextChunk(userID, documentID, index, c.DefaultQuery("algoritma", "AES"))
+	if err != nil {
+		documentError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ciphertext": ciphertext, "index": index, "chunk_count": count})
+}
+
 func documentParams(
 	c *gin.Context,
 ) (uuid.UUID, uuid.UUID, int, bool) {

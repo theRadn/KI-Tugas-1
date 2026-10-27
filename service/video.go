@@ -60,6 +60,41 @@ func packVideoData(plaintext []byte) ([]byte, error) {
 	return json.Marshal(versions)
 }
 
+// ciphertextPotongan membaca berkas potongan dan mengembalikan ciphertext
+// algoritma yang diminta tanpa mendekripsinya.
+func ciphertextPotongan(path, algorithm string) ([]byte, error) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, ErrVideoNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	var versions map[string]utils.EncryptedData
+	if err := json.Unmarshal(data, &versions); err != nil {
+		return nil, err
+	}
+	encrypted, ok := versions[algorithm]
+	if !ok {
+		return nil, ErrInvalidVideoChunk
+	}
+	return encrypted.Ciphertext, nil
+}
+
+// CiphertextChunk mengembalikan ciphertext satu potongan video untuk
+// fitur "lihat ciphertext", beserta jumlah potongannya.
+func (s *VideoService) CiphertextChunk(userID, videoID uuid.UUID, index int, algorithm string) ([]byte, int, error) {
+	manifest, err := s.manifest(userID, videoID)
+	if err != nil {
+		return nil, 0, err
+	}
+	if index < 0 || index >= manifest.ChunkCount {
+		return nil, 0, ErrInvalidVideoChunk
+	}
+	ciphertext, err := ciphertextPotongan(s.chunkPath(userID, videoID, index), algorithm)
+	return ciphertext, manifest.ChunkCount, err
+}
+
 func unpackVideoData(data []byte, algorithm string) ([]byte, error) {
 	ciphers, err := videoCiphers()
 	if err != nil {

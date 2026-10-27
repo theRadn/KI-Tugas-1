@@ -105,6 +105,19 @@ func (v *VideoController) GetChunk(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": chunk, "index": index, "chunk_count": count})
 }
 
+func (v *VideoController) GetCiphertext(c *gin.Context) {
+	userID, videoID, index, ok := videoParams(c)
+	if !ok {
+		return
+	}
+	ciphertext, count, err := v.service.CiphertextChunk(userID, videoID, index, c.DefaultQuery("algoritma", "AES"))
+	if err != nil {
+		videoError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ciphertext": ciphertext, "index": index, "chunk_count": count})
+}
+
 func videoUserID(c *gin.Context) (uuid.UUID, bool) {
 	id, err := uuid.Parse(c.GetString("userID"))
 	if err != nil {

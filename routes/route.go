@@ -52,6 +52,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, sessionManager *middleware.Ses
 		videos.POST("", videoController.Start)
 		videos.PUT("/:id/chunks/:index", potongan, videoController.PutChunk)
 		videos.GET("/:id/chunks/:index", potongan, videoController.GetChunk)
+		videos.GET("/:id/chunks/:index/ciphertext", potongan, videoController.GetCiphertext)
 
 		// Dokumen diunggah dan diunduh per potongan (maks 256 KB) agar muat
 		// di amplop enkripsi in-transit.
@@ -59,5 +60,6 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, sessionManager *middleware.Ses
 		documents.POST("", documentController.Start)
 		documents.PUT("/:id/chunks/:index", potongan, documentController.PutChunk)
 		documents.GET("/:id/chunks/:index", potongan, documentController.GetChunk)
+		documents.GET("/:id/chunks/:index/ciphertext", potongan, documentController.GetCiphertext)
 	}
 }

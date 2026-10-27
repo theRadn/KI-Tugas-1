@@ -57,6 +57,7 @@ Semua di bawah `/api` dan terenkripsi, kecuali `/handshake`.
 | PUT, GET | `/videos/:id/chunks/:index` (`data` base64, GET dengan `?algoritma=`) | ya |
 | POST | `/documents` (body `filename`, `size_bytes`) | ya |
 | PUT, GET | `/documents/:id/chunks/:index` (`data` base64, GET dengan `?algoritma=`) | ya |
+| GET | `/videos/:id/chunks/:index/ciphertext`, `/documents/:id/chunks/:index/ciphertext` (`?algoritma=`) | ya |
 | GET | `/beranda` | ya |
 | GET | `/analisis/berkas` | ya |
 | POST | `/analisis/uji-dekripsi` (body `berkas_id`, `jumlah_percobaan` 1-100) | ya |
