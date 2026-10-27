@@ -1,22 +1,8 @@
 package middleware
 
 import (
-	"crypto/ecdh"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
-	"errors"
-	"io"
 	"sync"
 	"time"
-
-	"golang.org/x/crypto/hkdf"
-)
-
-const (
-	sessionKeySize = 16
-	macKeySize     = 32
 )
 
 type Session struct {
@@ -46,74 +32,6 @@ func NewSessionManager(ttl time.Duration) *SessionManager {
 		sessions: make(map[string]*sessionEntry),
 		ttl:      ttl,
 	}
-}
-
-type HandshakeRequest struct {
-	ClientPublicKey string `json:"client_public_key" binding:"required"`
-}
-
-type HandshakeResponse struct {
-	SessionID       string    `json:"session_id"`
-	ServerPublicKey string    `json:"server_public_key"`
-	ExpiresAt       time.Time `json:"expires_at"`
-}
-
-func (m *SessionManager) CreateSession(
-	clientPublicKeyBytes []byte,
-) (HandshakeResult, error) {
-	curve := ecdh.X25519()
-
-	if len(clientPublicKeyBytes) != 32 {
-		return HandshakeResult{}, ErrInvalidClientPublicKey
-	}
-
-	clientPublicKey, err := curve.NewPublicKey(clientPublicKeyBytes)
-	if err != nil {
-		return HandshakeResult{}, ErrInvalidClientPublicKey
-	}
-
-	serverPrivateKey, err := curve.GenerateKey(rand.Reader)
-	if err != nil {
-		return HandshakeResult{}, err
-	}
-
-	sharedSecret, err := serverPrivateKey.ECDH(clientPublicKey)
-	if err != nil {
-		return HandshakeResult{}, ErrInvalidClientPublicKey
-	}
-
-	sessionID, err := generateSessionID()
-	if err != nil {
-		return HandshakeResult{}, err
-	}
-
-	aesKey, macKey, err := deriveSessionKeys(sharedSecret, sessionID)
-	if err != nil {
-		return HandshakeResult{}, err
-	}
-
-	expiresAt := time.Now().Add(m.ttl)
-
-	session := Session{
-		ID:        sessionID,
-		AESKey:    aesKey,
-		MACKey:    macKey,
-		ExpiresAt: expiresAt,
-	}
-
-	m.mu.Lock()
-	m.removeExpiredLocked()
-	m.sessions[sessionID] = &sessionEntry{
-		session: session,
-		usedIDs: make(map[string]struct{}),
-	}
-	m.mu.Unlock()
-
-	return HandshakeResult{
-		SessionID:       sessionID,
-		ServerPublicKey: serverPrivateKey.PublicKey().Bytes(),
-		ExpiresAt:       expiresAt,
-	}, nil
 }
 
 func (m *SessionManager) GetSession(sessionID string) (Session, bool) {
@@ -189,50 +107,4 @@ func (m *SessionManager) removeExpiredLocked() {
 			delete(m.sessions, id)
 		}
 	}
-}
-
-func generateSessionID() (string, error) {
-	b := make([]byte, 32)
-
-	if _, err := io.ReadFull(rand.Reader, b); err != nil {
-		return "", err
-	}
-
-	return hex.EncodeToString(b), nil
-}
-
-func deriveSessionKeys(
-	sharedSecret []byte,
-	sessionID string,
-) ([]byte, []byte, error) {
-	if len(sharedSecret) == 0 || sessionID == "" {
-		return nil, nil, errors.New("invalid key derivation input")
-	}
-
-	info := []byte("my-go-api/v3/" + sessionID)
-	reader := hkdf.New(sha256.New, sharedSecret, nil, info)
-
-	keyMaterial := make([]byte, sessionKeySize+macKeySize)
-	if _, err := io.ReadFull(reader, keyMaterial); err != nil {
-		return nil, nil, err
-	}
-
-	aesKey := append([]byte(nil), keyMaterial[:sessionKeySize]...)
-	macKey := append([]byte(nil), keyMaterial[sessionKeySize:]...)
-
-	return aesKey, macKey, nil
-}
-
-var ErrInvalidClientPublicKey = errors.New("invalid client public key")
-
-type HandshakeResult struct {
-	SessionID       string
-	ServerPublicKey []byte
-	ExpiresAt       time.Time
-}
-
-// Optional helper if you need to validate JSON manually elsewhere.
-func decodeJSON(body io.Reader, dst any) error {
-	decoder := json.NewDecoder(body)
-	return decoder.Decode(dst)
 }
