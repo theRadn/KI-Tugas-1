@@ -2,6 +2,7 @@ package controller
 
 import (
 	"errors"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -38,6 +39,8 @@ func tulisGalatBerkas(ctx *gin.Context, err error) {
 	case errors.Is(err, service.ErrKunciBerkas):
 		ctx.JSON(http.StatusServiceUnavailable, gin.H{"message": err.Error()})
 	default:
+		// Detail hanya dicatat di server, klien menerima pesan umum.
+		log.Printf("[berkas] %s %s: %v", ctx.Request.Method, ctx.FullPath(), err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{"message": "Gagal memproses berkas"})
 	}
 }
