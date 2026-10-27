@@ -39,3 +39,18 @@ type CiphertextResponse struct {
 	Ciphertext string `json:"ciphertext"`
 	Encoding   string `json:"encoding"`
 }
+
+// Berkas dikirim sebagai base64 di dalam amplop terenkripsi, karena
+// semua permintaan lewat middleware enkripsi in-transit (maks 1 MiB).
+type UnggahBerkasRequest struct {
+	NamaAsli  string `json:"nama_asli" binding:"required,max=255"`
+	TipeMIME  string `json:"tipe_mime" binding:"required"`
+	IsiBase64 string `json:"isi_base64" binding:"required"`
+}
+
+type UnduhBerkasResponse struct {
+	NamaAsli  string `json:"nama_asli"`
+	TipeMIME  string `json:"tipe_mime"`
+	Algoritma string `json:"algoritma"`
+	IsiBase64 string `json:"isi_base64"`
+}

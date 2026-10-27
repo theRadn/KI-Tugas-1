@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -13,6 +14,10 @@ import (
 const (
 	sessionEnvelopeVersion = "v3"
 	maxEncryptedBodySize   = 1 << 20 // 1 MiB
+
+	// Browser tidak bisa mengirim body pada GET, jadi amplop untuk GET
+	// dikirim lewat header ini sebagai JSON yang di-base64.
+	envelopeHeader = "X-Encrypted-Envelope"
 )
 
 type EncryptedEnvelope = utils.EncryptedEnvelope
@@ -86,21 +91,36 @@ func Encryption(sessionManager *SessionManager) gin.HandlerFunc {
 			return
 		}
 
-		if c.Request.Body == nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-				"error": "missing encrypted request body",
-			})
-			return
-		}
+		var body []byte
+		if c.Request.Method == http.MethodGet {
+			decoded, err := base64.StdEncoding.DecodeString(
+				c.GetHeader(envelopeHeader),
+			)
+			if err != nil {
+				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+					"error": "invalid encrypted envelope header",
+				})
+				return
+			}
+			body = decoded
+		} else {
+			if c.Request.Body == nil {
+				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+					"error": "missing encrypted request body",
+				})
+				return
+			}
 
-		body, err := io.ReadAll(
-			io.LimitReader(c.Request.Body, maxEncryptedBodySize+1),
-		)
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-				"error": "failed to read request body",
-			})
-			return
+			read, err := io.ReadAll(
+				io.LimitReader(c.Request.Body, maxEncryptedBodySize+1),
+			)
+			if err != nil {
+				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+					"error": "failed to read request body",
+				})
+				return
+			}
+			body = read
 		}
 
 		if len(body) == 0 || len(body) > maxEncryptedBodySize {

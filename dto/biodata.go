@@ -13,7 +13,7 @@ type PendidikanRequest struct {
 	NISN            string          `json:"nisn" binding:"omitempty,len=10,numeric"`
 	TahunMasukSMTA  int             `json:"tahun_masuk_smta" binding:"omitempty,gte=1900,lte=3000"`
 	TahunLulusSMTA  int             `json:"tahun_lulus_smta" binding:"omitempty,gte=1900,lte=3000"`
-	NilaiTKA        []NilaiTKAInput `json:"nilai_tka"`
+	NilaiTKA        []NilaiTKAInput `json:"nilai_tka" binding:"dive"`
 }
 
 type DataDiriRequest struct {

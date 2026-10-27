@@ -70,8 +70,12 @@ func daftarBagian(biodata *entity.Biodata) []dto.StatusBagian {
 	if biodata == nil {
 		return result
 	}
-	result[0].Tersimpan = true
-	result[0].DisimpanPada = &biodata.DiubahPada
+	// Baris biodata ikut dibuat saat tab lain atau berkas pertama disimpan,
+	// jadi Data Diri baru dianggap tersimpan bila nama ijazah sudah diisi.
+	if biodata.NamaIjazah != "" {
+		result[0].Tersimpan = true
+		result[0].DisimpanPada = &biodata.DiubahPada
+	}
 	setStatus(&result[1], biodata.Pendidikan.ID, biodata.Pendidikan.DiubahPada)
 	setStatus(&result[2], biodata.Keluarga.ID, biodata.Keluarga.DiubahPada)
 	setStatus(&result[3], biodata.Rumah.ID, biodata.Rumah.DiubahPada)

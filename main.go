@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"log"
+	"os"
 	"time"
 
 	"github.com/theRadn/KI-Tugas-1/config"
@@ -13,15 +14,16 @@ import (
 	"github.com/joho/godotenv" // untuk load file .env
 	"github.com/theRadn/KI-Tugas-1/migration"
 	"github.com/theRadn/KI-Tugas-1/routes"
-	"github.com/theRadn/KI-Tugas-1/seeding"
 	"github.com/theRadn/KI-Tugas-1/service"
 	"gorm.io/gorm"
 )
 
 func main() {
-	_ = godotenv.Load()
+	if err := godotenv.Load(); err != nil {
+		log.Println("File .env tidak ditemukan, memakai variabel lingkungan sistem")
+	}
+
 	migrateFlag := flag.Bool("migrate", false, "Run database migrations")
-	seedFlag := flag.Bool("seed", false, "Run data seeding")
 	flag.Parse()
 	hasTaskRun := false
 
@@ -30,11 +32,6 @@ func main() {
 
 	if *migrateFlag {
 		runMigrations(db)
-		hasTaskRun = true
-	}
-
-	if *seedFlag {
-		runSeeding(db)
 		hasTaskRun = true
 	}
 
@@ -50,6 +47,12 @@ func main() {
 	berandaController := controller.NewBerandaController(berandaService)
 	analisisService := service.NewAnalisisService(db)
 	analisisController := controller.NewAnalisisController(analisisService)
+	videoController := controller.NewVideoController(
+		service.NewVideoService("storage/videos"),
+		service.NewBerkasService(db),
+	)
+	documentService := service.NewDocumentService("storage/documents")
+	documentController := controller.NewDocumentController(documentService, service.NewBerkasService(db))
 
 	globalLimiter, err := middleware.NewIPRateLimiter(
 		100, 100, time.Minute,
@@ -78,7 +81,7 @@ func main() {
 	}
 	defer registerLimiter.Close()
 
-	handshakeLimiter, _ := middleware.NewIPRateLimiter(
+	handshakeLimiter, err := middleware.NewIPRateLimiter(
 		5, 1, time.Minute,
 		5*time.Minute,
 		time.Minute,
@@ -88,11 +91,23 @@ func main() {
 	}
 	defer handshakeLimiter.Close()
 
+	// 300 potongan per menit cukup untuk mengunggah dan mengunduh satu
+	// video 50 MB (masing-masing 100 potongan 512 KB) dalam semenit.
+	potonganLimiter, err := middleware.NewIPRateLimiter(
+		300, 300, time.Minute,
+		10*time.Minute, time.Minute,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer potonganLimiter.Close()
+
 	limiters := routes.RateLimiters{
 		Global:    globalLimiter,
 		Login:     loginLimiter,
 		Register:  registerLimiter,
 		Handshake: handshakeLimiter,
+		Potongan:  potonganLimiter,
 	}
 
 	router := gin.Default()
@@ -100,20 +115,23 @@ func main() {
 
 	routes.SetupRoutes(
 		router,
+		db,
 		sessionManager,
 		handshakeController,
 		berandaController,
 		analisisController,
+		videoController,
+		documentController,
 		limiters,
 	)
 
-	log.Fatal(router.Run(":8080"))
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	log.Fatal(router.Run(":" + port))
 }
 
 func runMigrations(db *gorm.DB) {
 	migration.Migrate(db)
-}
-
-func runSeeding(db *gorm.DB) {
-	seeding.ExampleSeed(db)
 }

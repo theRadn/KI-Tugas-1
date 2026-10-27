@@ -10,18 +10,22 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Detail kegagalan token tidak dikirim ke klien supaya tidak membantu
+// orang yang mencoba memalsukan token.
+const pesanTokenTidakValid = "Sesi login tidak valid atau kedaluwarsa, silakan masuk kembali"
+
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header diperlukan"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Silakan masuk terlebih dahulu"})
 			c.Abort()
 			return
 		}
 
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Format token salah"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": pesanTokenTidakValid})
 			c.Abort()
 			return
 		}
@@ -31,20 +35,20 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		claims, err := utils.VerifyToken(tokenString, secret)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token tidak valid: " + err.Error()})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": pesanTokenTidakValid})
 			c.Abort()
 			return
 		}
 
 		subRaw, exists := claims["sub"]
 		if !exists || subRaw == nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": pesanTokenTidakValid})
 			return
 		}
 
 		subStr, ok := subRaw.(string)
 		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid sub type"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": pesanTokenTidakValid})
 			return
 		}
 
