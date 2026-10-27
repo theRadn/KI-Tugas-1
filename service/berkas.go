@@ -252,11 +252,14 @@ func hapusFolder(b entity.Berkas) {
 	}
 }
 
-// Video diunggah per potongan lewat /api/videos. Batas 10 MB menjaga
-// jumlah potongan di bawah limiter global (100 permintaan per menit).
+// Video dan dokumen diunggah per potongan 512 KB lewat /api/videos dan
+// /api/documents. Rute potongan memakai limiter sendiri (lihat routes),
+// jadi tidak terbatas oleh limiter global 100 permintaan per menit.
 const (
-	KodeVideo     = "video_dokumentasi"
-	MaksVideoByte = 10 << 20
+	KodeVideo       = "video_dokumentasi"
+	MaksVideoByte   = 50 << 20
+	KodeDokumen     = "dokumen_lain"
+	MaksDokumenByte = 10 << 20
 )
 
 func ValidasiVideo(tipe string, ukuran int64) error {
@@ -264,21 +267,36 @@ func ValidasiVideo(tipe string, ukuran int64) error {
 		return fmt.Errorf("%w: format video harus MP4 atau WebM", ErrBerkasTidakSah)
 	}
 	if ukuran <= 0 || ukuran > MaksVideoByte {
-		return fmt.Errorf("%w: ukuran video maksimal 10 MB", ErrBerkasTidakSah)
+		return fmt.Errorf("%w: ukuran video maksimal 50 MB", ErrBerkasTidakSah)
 	}
 	return nil
 }
 
-// CatatVideo membuat baris berkas untuk video baru (status "mengunggah")
-// dan menggantikan video sebelumnya milik pengguna yang sama.
+func ValidasiDokumen(ukuran int64) error {
+	if ukuran <= 0 || ukuran > MaksDokumenByte {
+		return fmt.Errorf("%w: ukuran dokumen maksimal 10 MB", ErrBerkasTidakSah)
+	}
+	return nil
+}
+
 func (s *BerkasService) CatatVideo(ctx context.Context, userID, videoID uuid.UUID, nama, tipe string, ukuran int64, folder string) error {
+	return s.catatPotongan(ctx, userID, videoID, KodeVideo, nama, tipe, ukuran, folder)
+}
+
+func (s *BerkasService) CatatDokumen(ctx context.Context, userID, dokumenID uuid.UUID, nama, tipe string, ukuran int64, folder string) error {
+	return s.catatPotongan(ctx, userID, dokumenID, KodeDokumen, nama, tipe, ukuran, folder)
+}
+
+// catatPotongan membuat baris berkas untuk unggahan per potongan (status
+// "mengunggah") dan menggantikan unggahan sebelumnya dengan kode yang sama.
+func (s *BerkasService) catatPotongan(ctx context.Context, userID, id uuid.UUID, kode, nama, tipe string, ukuran int64, folder string) error {
 	biodata, err := s.biodataRepo.PastikanBiodata(ctx, userID)
 	if err != nil {
 		return err
 	}
 	var lama []entity.Berkas
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("biodata_id = ? AND kode_berkas = ?", biodata.ID, KodeVideo).Find(&lama).Error; err != nil {
+		if err := tx.Where("biodata_id = ? AND kode_berkas = ?", biodata.ID, kode).Find(&lama).Error; err != nil {
 			return err
 		}
 		for _, b := range lama {
@@ -287,10 +305,10 @@ func (s *BerkasService) CatatVideo(ctx context.Context, userID, videoID uuid.UUI
 			}
 		}
 		berkas := entity.Berkas{
-			BiodataID: biodata.ID, KodeBerkas: KodeVideo, NamaAsli: filepath.Base(nama),
+			BiodataID: biodata.ID, KodeBerkas: kode, NamaAsli: filepath.Base(nama),
 			UkuranByte: ukuran, TipeMIME: tipe, Status: "mengunggah", FilePath: folder,
 		}
-		berkas.ID = videoID
+		berkas.ID = id
 		return tx.Create(&berkas).Error
 	})
 	if err != nil {
@@ -302,12 +320,46 @@ func (s *BerkasService) CatatVideo(ctx context.Context, userID, videoID uuid.UUI
 	return nil
 }
 
-func (s *BerkasService) videoMilik(ctx context.Context, userID, videoID uuid.UUID) (entity.Berkas, error) {
-	b, err := s.milikPengguna(ctx, userID, videoID.String())
-	if err == nil && b.KodeBerkas != KodeVideo {
+func (s *BerkasService) berkasDenganKode(ctx context.Context, userID, id uuid.UUID, kode string) (entity.Berkas, error) {
+	b, err := s.milikPengguna(ctx, userID, id.String())
+	if err == nil && b.KodeBerkas != kode {
 		return entity.Berkas{}, ErrBerkasNotFound
 	}
 	return b, err
+}
+
+func (s *BerkasService) videoMilik(ctx context.Context, userID, videoID uuid.UUID) (entity.Berkas, error) {
+	return s.berkasDenganKode(ctx, userID, videoID, KodeVideo)
+}
+
+var tandaOLE = []byte{0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1}
+
+// cocokDokumen memeriksa isi potongan pertama sesuai ekstensi: PDF harus
+// PDF, format Office baru berupa ZIP, format Office lama berupa OLE.
+func cocokDokumen(nama string, awal []byte) bool {
+	jenis := http.DetectContentType(awal)
+	switch strings.ToLower(filepath.Ext(nama)) {
+	case ".pdf":
+		return jenis == "application/pdf"
+	case ".docx", ".xlsx", ".pptx":
+		return jenis == "application/zip"
+	case ".doc", ".xls", ".ppt":
+		return bytes.HasPrefix(awal, tandaOLE)
+	case ".txt", ".csv":
+		return strings.HasPrefix(jenis, "text/plain")
+	}
+	return false
+}
+
+func (s *BerkasService) CekAwalDokumen(ctx context.Context, userID, dokumenID uuid.UUID, potongan []byte) error {
+	b, err := s.berkasDenganKode(ctx, userID, dokumenID, KodeDokumen)
+	if err != nil {
+		return err
+	}
+	if !cocokDokumen(b.NamaAsli, potongan) {
+		return fmt.Errorf("%w: isi berkas tidak sesuai dengan format %s", ErrBerkasTidakSah, filepath.Ext(b.NamaAsli))
+	}
+	return nil
 }
 
 // CekAwalVideo memeriksa isi asli potongan pertama, bukan hanya tipe yang
@@ -324,11 +376,19 @@ func (s *BerkasService) CekAwalVideo(ctx context.Context, userID, videoID uuid.U
 }
 
 func (s *BerkasService) TandaiVideoTerunggah(ctx context.Context, userID, videoID uuid.UUID) error {
-	if _, err := s.videoMilik(ctx, userID, videoID); err != nil {
+	return s.tandaiTerunggah(ctx, userID, videoID, KodeVideo)
+}
+
+func (s *BerkasService) TandaiDokumenTerunggah(ctx context.Context, userID, dokumenID uuid.UUID) error {
+	return s.tandaiTerunggah(ctx, userID, dokumenID, KodeDokumen)
+}
+
+func (s *BerkasService) tandaiTerunggah(ctx context.Context, userID, id uuid.UUID, kode string) error {
+	if _, err := s.berkasDenganKode(ctx, userID, id, kode); err != nil {
 		return err
 	}
 	sekarang := time.Now()
-	return s.db.WithContext(ctx).Model(&entity.Berkas{}).Where("id = ?", videoID).
+	return s.db.WithContext(ctx).Model(&entity.Berkas{}).Where("id = ?", id).
 		Updates(map[string]any{"status": "terunggah", "diunggah_pada": &sekarang}).Error
 }
 

@@ -59,7 +59,7 @@ func main() {
 		service.NewBerkasService(db),
 	)
 	documentService := service.NewDocumentService("storage/documents")
-	documentController := controller.NewDocumentController(documentService)
+	documentController := controller.NewDocumentController(documentService, service.NewBerkasService(db))
 
 	globalLimiter, err := middleware.NewIPRateLimiter(
 		100, 100, time.Minute,
@@ -98,11 +98,23 @@ func main() {
 	}
 	defer handshakeLimiter.Close()
 
+	// 300 potongan per menit cukup untuk mengunggah dan mengunduh satu
+	// video 50 MB (masing-masing 100 potongan 512 KB) dalam semenit.
+	potonganLimiter, err := middleware.NewIPRateLimiter(
+		300, 300, time.Minute,
+		10*time.Minute, time.Minute,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer potonganLimiter.Close()
+
 	limiters := routes.RateLimiters{
 		Global:    globalLimiter,
 		Login:     loginLimiter,
 		Register:  registerLimiter,
 		Handshake: handshakeLimiter,
+		Potongan:  potonganLimiter,
 	}
 
 	router := gin.Default()

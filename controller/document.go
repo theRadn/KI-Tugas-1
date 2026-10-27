@@ -3,6 +3,7 @@ package controller
 import (
 	"errors"
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -12,12 +13,14 @@ import (
 
 type DocumentController struct {
 	service *service.DocumentService
+	berkas  *service.BerkasService
 }
 
 func NewDocumentController(
 	documentService *service.DocumentService,
+	berkasService *service.BerkasService,
 ) *DocumentController {
-	return &DocumentController{service: documentService}
+	return &DocumentController{service: documentService, berkas: berkasService}
 }
 
 func (d *DocumentController) Start(c *gin.Context) {
@@ -38,12 +41,30 @@ func (d *DocumentController) Start(c *gin.Context) {
 		return
 	}
 
+	if err := service.ValidasiDokumen(req.SizeBytes); err != nil {
+		documentError(c, err)
+		return
+	}
+
 	id, count, err := d.service.Start(
 		userID,
 		req.Filename,
 		req.SizeBytes,
 	)
 	if err != nil {
+		documentError(c, err)
+		return
+	}
+
+	// Dicatat di tabel berkas supaya muncul di daftar Berkas dan Beranda,
+	// dan ikut terhapus lewat DELETE /api/berkas/:id.
+	folder := d.service.Folder(userID, id)
+	nama, tipe, err := d.service.Info(userID, id)
+	if err == nil {
+		err = d.berkas.CatatDokumen(c.Request.Context(), userID, id, nama, tipe, req.SizeBytes, folder)
+	}
+	if err != nil {
+		_ = os.RemoveAll(folder)
 		documentError(c, err)
 		return
 	}
@@ -72,6 +93,17 @@ func (d *DocumentController) PutChunk(c *gin.Context) {
 		return
 	}
 
+	if index == 0 {
+		if err := d.berkas.CekAwalDokumen(c.Request.Context(), userID, documentID, req.Data); err != nil {
+			// Isi tidak sesuai format: buang baris dan foldernya.
+			if errors.Is(err, service.ErrBerkasTidakSah) {
+				_ = d.berkas.Hapus(c.Request.Context(), userID, documentID.String())
+			}
+			documentError(c, err)
+			return
+		}
+	}
+
 	if err := d.service.PutChunk(
 		userID,
 		documentID,
@@ -80,6 +112,13 @@ func (d *DocumentController) PutChunk(c *gin.Context) {
 	); err != nil {
 		documentError(c, err)
 		return
+	}
+
+	if lengkap, err := d.service.Lengkap(userID, documentID); err == nil && lengkap {
+		if err := d.berkas.TandaiDokumenTerunggah(c.Request.Context(), userID, documentID); err != nil {
+			documentError(c, err)
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"index": index})
@@ -147,8 +186,11 @@ func documentError(c *gin.Context, err error) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 	case errors.Is(err, service.ErrInvalidDocument):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-	case errors.Is(err, service.ErrUnsupportedDocumentType):
+	case errors.Is(err, service.ErrUnsupportedDocumentType),
+		errors.Is(err, service.ErrBerkasTidakSah):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	case errors.Is(err, service.ErrBerkasNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 	default:
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "pemrosesan dokumen gagal",

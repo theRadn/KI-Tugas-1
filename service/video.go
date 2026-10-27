@@ -11,7 +11,7 @@ import (
 	"github.com/theRadn/KI-Tugas-1/utils"
 )
 
-const MaxVideoChunkBytes = 256 << 10 // maks 256 kb per potongan
+const MaxVideoChunkBytes = 512 << 10 // maks 512 kb per potongan (amplop sekitar 910 KB, di bawah 1 MiB)
 const maxVideoChunks = 400 // maks 100 mb
 
 var ErrVideoNotFound = errors.New("video tidak ditemukan")

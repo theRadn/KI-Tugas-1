@@ -1,6 +1,8 @@
 package routes
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
@@ -13,10 +15,21 @@ type RateLimiters struct {
 	Login     *middleware.IPRateLimiter
 	Register  *middleware.IPRateLimiter
 	Handshake *middleware.IPRateLimiter
+	// Potongan video dan dokumen: satu berkas 50 MB sudah 100 permintaan,
+	// jadi rute potongan memakai kuota sendiri dan dilewati limiter global.
+	Potongan *middleware.IPRateLimiter
 }
 
 func SetupRoutes(router *gin.Engine, db *gorm.DB, sessionManager *middleware.SessionManager, handshakeController *controller.HandshakeController, berandaController controller.BerandaController, analisisController controller.AnalisisController, videoController *controller.VideoController, documentController *controller.DocumentController, limiters RateLimiters) {
-	router.Use(limiters.Global.Middleware())
+	global := limiters.Global.Middleware()
+	router.Use(func(c *gin.Context) {
+		if strings.Contains(c.FullPath(), "/chunks/") {
+			c.Next()
+			return
+		}
+		global(c)
+	})
+	potongan := limiters.Potongan.Middleware()
 
 	api := router.Group("/api")
 	api.POST("/handshake",
@@ -37,14 +50,14 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, sessionManager *middleware.Ses
 		// di amplop enkripsi in-transit.
 		videos := encrypted.Group("/videos", middleware.AuthMiddleware())
 		videos.POST("", videoController.Start)
-		videos.PUT("/:id/chunks/:index", videoController.PutChunk)
-		videos.GET("/:id/chunks/:index", videoController.GetChunk)
+		videos.PUT("/:id/chunks/:index", potongan, videoController.PutChunk)
+		videos.GET("/:id/chunks/:index", potongan, videoController.GetChunk)
 
 		// Dokumen diunggah dan diunduh per potongan (maks 256 KB) agar muat
 		// di amplop enkripsi in-transit.
 		documents := encrypted.Group("/documents", middleware.AuthMiddleware())
 		documents.POST("", documentController.Start)
-		documents.PUT("/:id/chunks/:index", documentController.PutChunk)
-		documents.GET("/:id/chunks/:index", documentController.GetChunk)
+		documents.PUT("/:id/chunks/:index", potongan, documentController.PutChunk)
+		documents.GET("/:id/chunks/:index", potongan, documentController.GetChunk)
 	}
 }

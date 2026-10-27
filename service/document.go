@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	MaxDocumentChunkBytes = 256 << 10
+	MaxDocumentChunkBytes = 512 << 10 // amplop sekitar 910 KB, di bawah 1 MiB
 	maxDocumentChunks     = 400
 	maxDocumentBytes      = int64(MaxDocumentChunkBytes) * maxDocumentChunks
 )
@@ -237,6 +237,35 @@ func (s *DocumentService) manifest(
 	}
 
 	return manifest, nil
+}
+
+// Folder mengembalikan lokasi potongan dokumen, dipakai saat dokumen
+// dicatat di tabel berkas supaya ikut terhapus bersama barisnya.
+func (s *DocumentService) Folder(userID, documentID uuid.UUID) string {
+	return s.documentDir(userID, documentID)
+}
+
+// Info mengembalikan nama dan tipe dokumen dari manifest.
+func (s *DocumentService) Info(userID, documentID uuid.UUID) (string, string, error) {
+	manifest, err := s.manifest(userID, documentID)
+	if err != nil {
+		return "", "", err
+	}
+	return manifest.Filename, manifest.ContentType, nil
+}
+
+// Lengkap bernilai true bila semua potongan sudah tersimpan.
+func (s *DocumentService) Lengkap(userID, documentID uuid.UUID) (bool, error) {
+	manifest, err := s.manifest(userID, documentID)
+	if err != nil {
+		return false, err
+	}
+	for i := 0; i < manifest.ChunkCount; i++ {
+		if _, err := os.Stat(s.chunkPath(userID, documentID, i)); err != nil {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func (s *DocumentService) documentDir(
