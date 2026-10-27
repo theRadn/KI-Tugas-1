@@ -10,6 +10,7 @@ import (
 	"github.com/theRadn/KI-Tugas-1/entity"
 	"github.com/theRadn/KI-Tugas-1/repository"
 
+	"github.com/gin-gonic/gin/binding"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -134,7 +135,7 @@ func (s *BiodataService) SaveTab(
 	case "data-diri":
 		var v dto.DataDiriRequest
 
-		if err = json.Unmarshal(body, &v); err != nil {
+		if err = decode(body, &v); err != nil {
 			return err
 		}
 
@@ -187,7 +188,7 @@ func (s *BiodataService) SaveTab(
 	case "pendidikan":
 		var v dto.PendidikanRequest
 
-		if err = json.Unmarshal(body, &v); err != nil {
+		if err = decode(body, &v); err != nil {
 			return err
 		}
 
@@ -213,7 +214,7 @@ func (s *BiodataService) SaveTab(
 	case "keluarga":
 		var v dto.KeluargaRequest
 
-		if err = json.Unmarshal(body, &v); err != nil {
+		if err = decode(body, &v); err != nil {
 			return err
 		}
 
@@ -269,7 +270,7 @@ func (s *BiodataService) SaveTab(
 
 	case "rumah":
 		var v dto.RumahRequest
-		if err = json.Unmarshal(body, &v); err != nil {
+		if err = decode(body, &v); err != nil {
 			return err
 		}
 
@@ -288,7 +289,7 @@ func (s *BiodataService) SaveTab(
 
 	case "catatan-khusus":
 		var v dto.CatatanKhususRequest
-		if err = json.Unmarshal(body, &v); err != nil {
+		if err = decode(body, &v); err != nil {
 			return err
 		}
 
@@ -305,7 +306,7 @@ func (s *BiodataService) SaveTab(
 
 	case "pendukung":
 		var v dto.PendukungRequest
-		if err = json.Unmarshal(body, &v); err != nil {
+		if err = decode(body, &v); err != nil {
 			return err
 		}
 
@@ -325,6 +326,15 @@ func (s *BiodataService) SaveTab(
 	default:
 		return ErrInvalidTab
 	}
+}
+
+// decode membaca JSON lalu menjalankan aturan binding:"..." pada DTO,
+// karena json.Unmarshal sendiri tidak memeriksanya.
+func decode(body []byte, v any) error {
+	if err := json.Unmarshal(body, v); err != nil {
+		return err
+	}
+	return binding.Validator.ValidateStruct(v)
 }
 
 func strptr(s string) *string {

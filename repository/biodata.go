@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
+	"time"
 
 	"github.com/theRadn/KI-Tugas-1/entity"
 
@@ -52,6 +54,11 @@ func (r *BiodataRepository) SaveMain(
 			First(&old).Error
 
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			no, err := nomorPendaftaranBaru(tx)
+			if err != nil {
+				return err
+			}
+			b.NoPendaftaran = no
 			return tx.Create(b).Error
 		}
 
@@ -61,10 +68,14 @@ func (r *BiodataRepository) SaveMain(
 
 		b.ID = old.ID
 
+		// Select("*") supaya nilai nol (false, teks kosong) ikut tersimpan.
+		// NoPendaftaran dibuat sistem, jadi tidak boleh tertimpa.
 		return tx.Model(&old).
+			Select("*").
 			Omit(
 				"ID",
 				"UserID",
+				"NoPendaftaran",
 				"DibuatPada",
 				"Pendidikan",
 				"Keluarga",
@@ -90,7 +101,11 @@ func (r *BiodataRepository) SaveRelation(
 			First(&b).Error
 
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			b = entity.Biodata{UserID: userID}
+			no, err := nomorPendaftaranBaru(tx)
+			if err != nil {
+				return err
+			}
+			b = entity.Biodata{UserID: userID, NoPendaftaran: no}
 
 			if err := tx.Create(&b).Error; err != nil {
 				return err
@@ -133,6 +148,7 @@ func (r *BiodataRepository) SaveRelation(
 				v.ID = old.ID
 
 				if err := tx.Model(&old).
+					Select("*").
 					Omit(
 						"ID",
 						"BiodataID",
@@ -185,6 +201,17 @@ func saveOne(
 
 	return tx.Model(value).
 		Where("biodata_id = ?", id).
+		Select("*").
 		Omit("ID", "BiodataID", "DibuatPada").
 		Updates(value).Error
+}
+
+// nomorPendaftaranBaru dipanggil di dalam transaksi tepat sebelum baris
+// Biodata baru dibuat, contoh hasil: SIPMABA-2026-000001.
+func nomorPendaftaranBaru(tx *gorm.DB) (string, error) {
+	var jumlah int64
+	if err := tx.Model(&entity.Biodata{}).Count(&jumlah).Error; err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("SIPMABA-%d-%06d", time.Now().Year(), jumlah+1), nil
 }
