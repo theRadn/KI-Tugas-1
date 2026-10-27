@@ -46,10 +46,15 @@ func main() {
 
 	handshakeService := service.NewHandshakeService(sessionManager, 15*time.Minute)
 	handshakeController := controller.NewHandshakeController(handshakeService)
+	berandaService := service.NewBerandaService(db)
+	berandaController := controller.NewBerandaController(berandaService)
+	analisisService := service.NewAnalisisService(db)
+	analisisController := controller.NewAnalisisController(analisisService)
 
 	router := gin.Default()
+	router.Use(middleware.CORSMiddleware())
 
-	routes.SetupRoutes(router, sessionManager, handshakeController)
+	routes.SetupRoutes(router, sessionManager, handshakeController, berandaController, analisisController)
 
 	log.Fatal(router.Run(":8080"))
 }

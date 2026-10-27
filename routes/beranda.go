@@ -6,7 +6,7 @@ import (
 	"github.com/theRadn/KI-Tugas-1/middleware"
 )
 
-func Beranda(route *gin.Engine, beranda controller.BerandaController) {
+func Beranda(route *gin.RouterGroup, beranda controller.BerandaController) {
 	// endpoint untuk dapetin data beranda user (status biodata per bagian, jumlah berkas, dan total ukuran berkas)
-	route.GET("/api/beranda", middleware.AuthMiddleware(), beranda.Get)
+	route.GET("/beranda", middleware.AuthMiddleware(), beranda.Get)
 }
