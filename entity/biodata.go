@@ -52,7 +52,6 @@ type Biodata struct {
 	Rumah            Rumah            `gorm:"foreignKey:BiodataID;references:ID" json:"rumah"`
 	CatatanKhusus    CatatanKhusus    `gorm:"foreignKey:BiodataID;references:ID" json:"catatan_khusus"`
 	PendukungEkonomi PendukungEkonomi `gorm:"foreignKey:BiodataID;references:ID" json:"pendukung"`
-	Dokumen          []Dokumen        `gorm:"foreignKey:BiodataID;references:ID" json:"dokumen,omitempty"`
 	Berkas           []Berkas         `gorm:"foreignKey:BiodataID;references:ID" json:"berkas,omitempty"`
 
 	DibuatPada time.Time `gorm:"autoCreateTime" json:"dibuat_pada"`
@@ -152,16 +151,4 @@ type PendukungEkonomi struct {
 
 func (PendukungEkonomi) TableName() string { 
 	return "pendukung_ekonomi" 
-}
-
-type Dokumen struct {
-	BaseModel
-	BiodataID  uuid.UUID `gorm:"type:text;not null;uniqueIndex:idx_dokumen_biodata_kode,priority:1" json:"biodata_id"`
-	Kode       string    `gorm:"type:varchar(50);not null;uniqueIndex:idx_dokumen_biodata_kode,priority:2" json:"kode"`
-	FilePath   string    `gorm:"type:text;not null" json:"file_path"`
-	DibuatPada time.Time `gorm:"autoCreateTime" json:"dibuat_pada"`
-}
-
-func (Dokumen) TableName() string { 
-	return "dokumen" 
 }

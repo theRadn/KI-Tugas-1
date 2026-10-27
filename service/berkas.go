@@ -45,8 +45,8 @@ type aturanBerkas struct {
 }
 
 // Aturan mengikuti kontrak-data.md bagian 5.2, 5.5, dan 6.
-// Dokumen dan video (bagian "Lainnya") belum didukung karena melebihi
-// batas 1 MiB amplop enkripsi in-transit.
+// Dokumen dan video (bagian "Lainnya") diunggah per potongan lewat
+// /api/documents dan /api/videos, bukan lewat aturan di sini.
 func aturanUntuk(kode string) (aturanBerkas, bool) {
 	// Tanpa batas minimum: pengguna tidak bisa menyesuaikan ukuran berkas
 	// yang terlalu kecil, jadi cukup dibatasi atasnya.

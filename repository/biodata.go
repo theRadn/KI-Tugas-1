@@ -32,7 +32,6 @@ func (r *BiodataRepository) Get(
 		Preload("Rumah").
 		Preload("CatatanKhusus").
 		Preload("PendukungEkonomi").
-		Preload("Dokumen").
 		Where("user_id = ?", userID).
 		First(&b).Error
 
@@ -82,7 +81,6 @@ func (r *BiodataRepository) SaveMain(
 				"Rumah",
 				"CatatanKhusus",
 				"PendukungEkonomi",
-				"Dokumen",
 				"Berkas",
 			).
 			Updates(b).Error

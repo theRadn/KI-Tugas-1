@@ -46,7 +46,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, sessionManager *middleware.Ses
 		Beranda(encrypted, berandaController)
 		Analisis(encrypted, analisisController)
 
-		// Video diunggah dan diunduh per potongan (maks 256 KB) agar muat
+		// Video diunggah dan diunduh per potongan (maks 512 KB) agar muat
 		// di amplop enkripsi in-transit.
 		videos := encrypted.Group("/videos", middleware.AuthMiddleware())
 		videos.POST("", videoController.Start)
@@ -54,7 +54,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, sessionManager *middleware.Ses
 		videos.GET("/:id/chunks/:index", potongan, videoController.GetChunk)
 		videos.GET("/:id/chunks/:index/ciphertext", potongan, videoController.GetCiphertext)
 
-		// Dokumen diunggah dan diunduh per potongan (maks 256 KB) agar muat
+		// Dokumen diunggah dan diunduh per potongan (maks 512 KB) agar muat
 		// di amplop enkripsi in-transit.
 		documents := encrypted.Group("/documents", middleware.AuthMiddleware())
 		documents.POST("", documentController.Start)

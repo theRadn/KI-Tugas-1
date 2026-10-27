@@ -12,22 +12,23 @@ func Migrate(db *gorm.DB) {
 
 	// Indeks lama hanya memuat kolom kode, sehingga kode berkas unik untuk
 	// seluruh aplikasi dan pengguna kedua tidak bisa mengunggah kode yang sama.
-	for _, lama := range []struct {
-		model any
-		nama  string
-	}{
-		{&entity.Berkas{}, "idx_biodata_kode_berkas"},
-		{&entity.Dokumen{}, "idx_biodata_dokumen"},
-	} {
-		if db.Migrator().HasIndex(lama.model, lama.nama) {
-			if err := db.Migrator().DropIndex(lama.model, lama.nama); err != nil {
+	if db.Migrator().HasIndex(&entity.Berkas{}, "idx_biodata_kode_berkas") {
+		if err := db.Migrator().DropIndex(&entity.Berkas{}, "idx_biodata_kode_berkas"); err != nil {
+			log.Fatalf("Migration failed: %v", err)
+		}
+	}
+
+	// Tabel yang tidak dipakai lagi: examples (sisa template) dan dokumen
+	// (rancangan lama, dokumen kini disimpan di tabel berkas).
+	for _, tabel := range []string{"examples", "dokumen"} {
+		if db.Migrator().HasTable(tabel) {
+			if err := db.Migrator().DropTable(tabel); err != nil {
 				log.Fatalf("Migration failed: %v", err)
 			}
 		}
 	}
 
 	err := db.AutoMigrate(
-		&entity.Example{},
 		&entity.User{},
 		&entity.Biodata{},
 		&entity.Pendidikan{},
@@ -36,7 +37,6 @@ func Migrate(db *gorm.DB) {
 		&entity.Rumah{},
 		&entity.CatatanKhusus{},
 		&entity.PendukungEkonomi{},
-		&entity.Dokumen{},
 		&entity.Berkas{},
 		&entity.EnkripsiBerkas{},
 		&entity.HasilAnalisis{},
@@ -58,7 +58,6 @@ func ResetDatabase(db *gorm.DB) {
 		&entity.HasilAnalisis{},
 		&entity.EnkripsiBerkas{},
 		&entity.Berkas{},
-		&entity.Dokumen{},
 		&entity.PendukungEkonomi{},
 		&entity.CatatanKhusus{},
 		&entity.Rumah{},
@@ -67,7 +66,6 @@ func ResetDatabase(db *gorm.DB) {
 		&entity.Pendidikan{},
 		&entity.Biodata{},
 		&entity.User{},
-		&entity.Example{},
 	)
 	if err != nil {
 		log.Fatalf("Failed to reset database: %v", err)

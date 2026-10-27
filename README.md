@@ -9,7 +9,7 @@ git clone https://github.com/theRadn/KI-Tugas-1.git
 cd KI-Tugas-1
 cp .env.example .env    # lalu isi semua nilai, perhatikan panjang kunci
 go mod download
-go run main.go --migrate --seed
+go run main.go --migrate
 go run main.go          # server di http://localhost:8080
 ```
 

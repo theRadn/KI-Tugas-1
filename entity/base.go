@@ -19,8 +19,3 @@ func (base *BaseModel) BeforeCreate(tx *gorm.DB) (err error) {
 	}
 	return nil
 }
-
-type Example struct {
-	BaseModel
-	Test string `gorm:"type:varchar(255);not null"`
-}
