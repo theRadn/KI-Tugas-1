@@ -8,9 +8,10 @@ import (
 
 type Berkas struct {
 	BaseModel
-	BiodataID uuid.UUID `gorm:"type:text;index;not null" json:"biodata_id"`
+	// Kode berkas unik per biodata (bukan per aplikasi), lewat indeks gabungan.
+	BiodataID uuid.UUID `gorm:"type:text;not null;uniqueIndex:idx_berkas_biodata_kode,priority:1" json:"biodata_id"`
 
-	KodeBerkas string `gorm:"type:varchar(80);not null;uniqueIndex:idx_biodata_kode_berkas" json:"kode_berkas"`
+	KodeBerkas string `gorm:"type:varchar(80);not null;uniqueIndex:idx_berkas_biodata_kode,priority:2" json:"kode_berkas"`
 	NamaAsli   string `gorm:"type:varchar(255);not null" json:"nama_asli"`
 	UkuranByte int64  `gorm:"type:bigint;not null" json:"ukuran_byte"`
 	TipeMIME   string `gorm:"type:varchar(100);not null" json:"tipe_mime"`

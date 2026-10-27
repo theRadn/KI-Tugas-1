@@ -156,8 +156,8 @@ func (PendukungEkonomi) TableName() string {
 
 type Dokumen struct {
 	BaseModel
-	BiodataID  uuid.UUID `gorm:"type:text;index;not null" json:"biodata_id"`
-	Kode       string    `gorm:"type:varchar(50);not null;uniqueIndex:idx_biodata_dokumen" json:"kode"`
+	BiodataID  uuid.UUID `gorm:"type:text;not null;uniqueIndex:idx_dokumen_biodata_kode,priority:1" json:"biodata_id"`
+	Kode       string    `gorm:"type:varchar(50);not null;uniqueIndex:idx_dokumen_biodata_kode,priority:2" json:"kode"`
 	FilePath   string    `gorm:"type:text;not null" json:"file_path"`
 	DibuatPada time.Time `gorm:"autoCreateTime" json:"dibuat_pada"`
 }

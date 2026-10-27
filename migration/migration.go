@@ -10,6 +10,22 @@ import (
 func Migrate(db *gorm.DB) {
 	log.Println("Migration started...")
 
+	// Indeks lama hanya memuat kolom kode, sehingga kode berkas unik untuk
+	// seluruh aplikasi dan pengguna kedua tidak bisa mengunggah kode yang sama.
+	for _, lama := range []struct {
+		model any
+		nama  string
+	}{
+		{&entity.Berkas{}, "idx_biodata_kode_berkas"},
+		{&entity.Dokumen{}, "idx_biodata_dokumen"},
+	} {
+		if db.Migrator().HasIndex(lama.model, lama.nama) {
+			if err := db.Migrator().DropIndex(lama.model, lama.nama); err != nil {
+				log.Fatalf("Migration failed: %v", err)
+			}
+		}
+	}
+
 	err := db.AutoMigrate(
 		&entity.Example{},
 		&entity.User{},
