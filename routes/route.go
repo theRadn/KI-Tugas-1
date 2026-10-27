@@ -10,15 +10,29 @@ import (
 	"github.com/theRadn/KI-Tugas-1/middleware"
 )
 
-func SetupRoutes(router *gin.Engine, sessionManager *middleware.SessionManager, handshakeController *controller.HandshakeController, berandaController controller.BerandaController, analisisController controller.AnalisisController) {
-	router.POST("/api/handshake", handshakeController.Handshake)
+type RateLimiters struct {
+	Global    *middleware.IPRateLimiter
+	Login     *middleware.IPRateLimiter
+	Register  *middleware.IPRateLimiter
+	Handshake *middleware.IPRateLimiter
+}
+
+func SetupRoutes(router *gin.Engine, sessionManager *middleware.SessionManager, handshakeController *controller.HandshakeController, berandaController controller.BerandaController, analisisController controller.AnalisisController, limiters RateLimiters) {
+	router.Use(limiters.Global.Middleware())
 
 	api := router.Group("/api")
-	api.Use(middleware.Encryption(sessionManager))
-	api.POST("/hello", hello)
+	api.POST("/handshake",
+		limiters.Handshake.Middleware(),
+		handshakeController.Handshake,
+	)
 
-	Beranda(api, berandaController)
-	Analisis(api, analisisController)
+	encrypted := api.Group("")
+	encrypted.Use(middleware.Encryption(sessionManager))
+	{
+		encrypted.POST("/hello", hello)
+		Beranda(encrypted, berandaController)
+		Analisis(encrypted, analisisController)
+	}
 }
 
 func hello(c *gin.Context) {

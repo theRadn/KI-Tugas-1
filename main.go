@@ -51,10 +51,61 @@ func main() {
 	analisisService := service.NewAnalisisService(db)
 	analisisController := controller.NewAnalisisController(analisisService)
 
+	globalLimiter, err := middleware.NewIPRateLimiter(
+		100, 100, time.Minute,
+		10*time.Minute, time.Minute,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer globalLimiter.Close()
+
+	loginLimiter, err := middleware.NewIPRateLimiter(
+		5, 5, time.Minute,
+		10*time.Minute, time.Minute,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer loginLimiter.Close()
+
+	registerLimiter, err := middleware.NewIPRateLimiter(
+		5, 5, time.Minute,
+		10*time.Minute, time.Minute,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer registerLimiter.Close()
+
+	handshakeLimiter, _ := middleware.NewIPRateLimiter(
+		5, 1, time.Minute,
+		5*time.Minute,
+		time.Minute,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer handshakeLimiter.Close()
+
+	limiters := routes.RateLimiters{
+		Global:    globalLimiter,
+		Login:     loginLimiter,
+		Register:  registerLimiter,
+		Handshake: handshakeLimiter,
+	}
+
 	router := gin.Default()
 	router.Use(middleware.CORSMiddleware())
 
-	routes.SetupRoutes(router, sessionManager, handshakeController, berandaController, analisisController)
+	routes.SetupRoutes(
+		router,
+		sessionManager,
+		handshakeController,
+		berandaController,
+		analisisController,
+		limiters,
+	)
 
 	log.Fatal(router.Run(":8080"))
 }
