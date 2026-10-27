@@ -102,5 +102,4 @@ type BiodataResponse struct {
 	ID string `json:"id"`
 	BiodataRequest
 	NoPendaftaran string            `json:"no_pendaftaran,omitempty"`
-	Dokumen       []DokumenResponse `json:"dokumen,omitempty"`
 }
