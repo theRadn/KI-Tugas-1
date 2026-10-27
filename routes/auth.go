@@ -2,9 +2,9 @@
 package routes
 
 import (
-	"KI-Tugas-1/controller"
-	"KI-Tugas-1/repository"
-	"KI-Tugas-1/service"
+	"github.com/theRadn/KI-Tugas-1/controller"
+	"github.com/theRadn/KI-Tugas-1/repository"
+	"github.com/theRadn/KI-Tugas-1/service"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"

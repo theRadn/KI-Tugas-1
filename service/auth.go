@@ -6,9 +6,9 @@ import (
 	"errors"
 	"strings"
 
-	"KI-Tugas-1/dto"
-	"KI-Tugas-1/entity"
-	"KI-Tugas-1/repository"
+	"github.com/theRadn/KI-Tugas-1/dto"
+	"github.com/theRadn/KI-Tugas-1/entity"
+	"github.com/theRadn/KI-Tugas-1/repository"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"

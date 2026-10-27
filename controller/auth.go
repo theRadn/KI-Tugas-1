@@ -2,13 +2,13 @@ package controller
 
 import (
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
+	"github.com/google/uuid"
 	"errors"
 	"net/http"
 
 	// DB
-	"KI-Tugas-1/dto"
-	"KI-Tugas-1/service"
+	"github.com/theRadn/KI-Tugas-1/dto"
+	"github.com/theRadn/KI-Tugas-1/service"
 )
 
 type AuthController struct {

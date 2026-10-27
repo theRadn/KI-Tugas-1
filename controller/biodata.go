@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/http"
 
-	"KI-Tugas-1/service"
+	"github.com/theRadn/KI-Tugas-1/service"
 
 	"github.com/gin-gonic/gin"
 )

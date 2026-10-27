@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"KI-Tugas-1/entity"
+	"github.com/theRadn/KI-Tugas-1/entity"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"

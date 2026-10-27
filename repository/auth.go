@@ -6,7 +6,7 @@ import (
     "github.com/google/uuid"
 	"gorm.io/gorm"
 
-	"KI-Tugas-1/entity"
+	"github.com/theRadn/KI-Tugas-1/entity"
 )
 
 type AuthRepository struct {
@@ -77,6 +77,23 @@ func (r *AuthRepository) FindByEmail(
 
 	err := r.db.WithContext(ctx).
 		Where("email = ?", email).
+		First(&user).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+func (r *AuthRepository) FindByID(
+	ctx context.Context,
+	id uuid.UUID,
+) (*entity.User, error) {
+	var user entity.User
+
+	err := r.db.WithContext(ctx).
+		Where("id = ?", id).
 		First(&user).Error
 
 	if err != nil {

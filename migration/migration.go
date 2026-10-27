@@ -12,6 +12,19 @@ func Migrate(db *gorm.DB) {
 
 	err := db.AutoMigrate(
 		&entity.Example{},
+		&entity.User{},
+		&entity.Biodata{},
+		&entity.Pendidikan{},
+		&entity.NilaiTKA{},
+		&entity.BiodataKeluarga{},
+		&entity.Rumah{},
+		&entity.CatatanKhusus{},
+		&entity.PendukungEkonomi{},
+		&entity.Dokumen{},
+		&entity.Berkas{},
+		&entity.EnkripsiBerkas{},
+		&entity.HasilAnalisis{},
+		&entity.HasilAnalisisAlgoritma{},
 	)
 
 	if err != nil {
@@ -25,6 +38,19 @@ func ResetDatabase(db *gorm.DB) {
 	log.Println("Resetting database...")
 
 	err := db.Migrator().DropTable(
+		&entity.HasilAnalisisAlgoritma{},
+		&entity.HasilAnalisis{},
+		&entity.EnkripsiBerkas{},
+		&entity.Berkas{},
+		&entity.Dokumen{},
+		&entity.PendukungEkonomi{},
+		&entity.CatatanKhusus{},
+		&entity.Rumah{},
+		&entity.BiodataKeluarga{},
+		&entity.NilaiTKA{},
+		&entity.Pendidikan{},
+		&entity.Biodata{},
+		&entity.User{},
 		&entity.Example{},
 	)
 	if err != nil {
