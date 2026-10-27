@@ -5,10 +5,12 @@ import (
 	"log"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/theRadn/KI-Tugas-1/config"
 	"github.com/theRadn/KI-Tugas-1/controller"
 	"github.com/theRadn/KI-Tugas-1/middleware"
+
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv" // untuk load file .env
 	"github.com/theRadn/KI-Tugas-1/migration"
 	"github.com/theRadn/KI-Tugas-1/routes"
 	"github.com/theRadn/KI-Tugas-1/seeding"
@@ -17,6 +19,7 @@ import (
 )
 
 func main() {
+	_ = godotenv.Load()
 	migrateFlag := flag.Bool("migrate", false, "Run database migrations")
 	seedFlag := flag.Bool("seed", false, "Run data seeding")
 	flag.Parse()
