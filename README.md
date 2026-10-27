@@ -50,6 +50,8 @@ Semua di bawah `/api` dan terenkripsi, kecuali `/handshake`.
 | GET | `/berkas/:id/unduh?algoritma=AES\|DES\|RC4` | ya |
 | GET | `/berkas/:id/ciphertext?algoritma=AES\|DES\|RC4` | ya |
 | DELETE | `/berkas/:id` | ya |
+| POST | `/videos` (body `chunk_count`, `size_bytes`, `nama_asli`, `tipe_mime`) | ya |
+| PUT, GET | `/videos/:id/chunks/:index` (`data` base64, GET dengan `?algoritma=`) | ya |
 | GET | `/beranda` | ya |
 | GET | `/analisis/berkas` | ya |
 | POST | `/analisis/uji-dekripsi` (body `berkas_id`, `jumlah_percobaan` 1-100) | ya |
@@ -60,4 +62,6 @@ Semua di bawah `/api` dan terenkripsi, kecuali `/handshake`.
 - Satu set kunci berkas untuk semua pengguna, disimpan di `.env`.
   Kunci yang sama juga dipakai sebagai kunci HMAC berkas.
 - `keluar` belum mencabut JWT; token tetap berlaku sampai kedaluwarsa.
-- Dokumen dan video (lebih dari 1 MiB) belum bisa diunggah lewat amplop.
+- Video MP4/WebM maks 10 MB, dikirim per potongan 256 KB lewat `/videos`
+  (batas ini menjaga jumlah permintaan di bawah limiter global 100/menit).
+- Dokumen (PDF/DOC/XLS) belum didukung.
