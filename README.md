@@ -33,7 +33,8 @@ Butuh CGO (gcc) karena memakai `go-sqlite3`.
 - **Autentikasi.** JWT (120 menit) di header `Authorization: Bearer`.
   Kata sandi di-hash dengan bcrypt.
 - **Rate limit.** Global 100/menit, masuk dan daftar 5/menit, handshake
-  5 lalu 1/menit per IP.
+  5 lalu 1/menit per IP. Rute potongan video dan dokumen punya kuota sendiri
+  300/menit dan tidak dihitung di limiter global.
 
 ## Endpoint
 
@@ -52,6 +53,8 @@ Semua di bawah `/api` dan terenkripsi, kecuali `/handshake`.
 | DELETE | `/berkas/:id` | ya |
 | POST | `/videos` (body `chunk_count`, `size_bytes`, `nama_asli`, `tipe_mime`) | ya |
 | PUT, GET | `/videos/:id/chunks/:index` (`data` base64, GET dengan `?algoritma=`) | ya |
+| POST | `/documents` (body `filename`, `size_bytes`) | ya |
+| PUT, GET | `/documents/:id/chunks/:index` (`data` base64, GET dengan `?algoritma=`) | ya |
 | GET | `/beranda` | ya |
 | GET | `/analisis/berkas` | ya |
 | POST | `/analisis/uji-dekripsi` (body `berkas_id`, `jumlah_percobaan` 1-100) | ya |
@@ -62,6 +65,6 @@ Semua di bawah `/api` dan terenkripsi, kecuali `/handshake`.
 - Satu set kunci berkas untuk semua pengguna, disimpan di `.env`.
   Kunci yang sama juga dipakai sebagai kunci HMAC berkas.
 - `keluar` belum mencabut JWT; token tetap berlaku sampai kedaluwarsa.
-- Video MP4/WebM maks 10 MB, dikirim per potongan 256 KB lewat `/videos`
-  (batas ini menjaga jumlah permintaan di bawah limiter global 100/menit).
-- Dokumen (PDF/DOC/XLS) belum didukung.
+- Video MP4/WebM maks 50 MB dan dokumen maks 10 MB, dikirim per potongan
+  512 KB (amplop sekitar 910 KB). Keduanya tercatat di tabel berkas, tetapi
+  tidak ikut Analisis karena formatnya per potongan.
