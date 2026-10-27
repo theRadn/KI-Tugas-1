@@ -33,7 +33,7 @@ var (
 	ErrBerkasNotFound  = errors.New("berkas tidak ditemukan")
 	folderPenyimpanan  = filepath.Join("storage", "berkas")
 	tipeGambar         = []string{"image/jpeg", "image/png"}
-	tipeVideo          = []string{"video/mp4", "video/webm"}
+	tipeVideo          = []string{"video/mp4", "video/webm", "video/x-matroska"}
 	algoritmaBerkas    = []string{"AES", "DES", "RC4"}
 	panjangKunciBerkas = map[string]int{"AES": 32, "DES": 8}
 )
@@ -362,15 +362,34 @@ func (s *BerkasService) CekAwalDokumen(ctx context.Context, userID, dokumenID uu
 	return nil
 }
 
+// jenisVideo mengenali format dari isi: MP4 diawali box "ftyp" di byte
+// 4-8, WebM/Matroska diawali header EBML 1A 45 DF A3. http.DetectContentType
+// menolak sebagian MP4 asli (brand tanpa "mp4"), jadi diperiksa sendiri.
+func jenisVideo(awal []byte) string {
+	switch {
+	case len(awal) >= 8 && string(awal[4:8]) == "ftyp":
+		return "video/mp4"
+	case bytes.HasPrefix(awal, []byte{0x1A, 0x45, 0xDF, 0xA3}):
+		return "video/webm"
+	}
+	return ""
+}
+
 // CekAwalVideo memeriksa isi asli potongan pertama, bukan hanya tipe yang
-// diakui klien.
+// diakui klien. Tipe di baris berkas disesuaikan dengan isinya, karena
+// perekam layar sering menyimpan Matroska dengan nama .mp4.
 func (s *BerkasService) CekAwalVideo(ctx context.Context, userID, videoID uuid.UUID, potongan []byte) error {
 	b, err := s.videoMilik(ctx, userID, videoID)
 	if err != nil {
 		return err
 	}
-	if http.DetectContentType(potongan) != b.TipeMIME {
-		return fmt.Errorf("%w: isi berkas bukan video %s", ErrBerkasTidakSah, b.TipeMIME)
+	jenis := jenisVideo(potongan)
+	if jenis == "" {
+		return fmt.Errorf("%w: isi berkas bukan video MP4 atau WebM", ErrBerkasTidakSah)
+	}
+	if jenis != b.TipeMIME {
+		return s.db.WithContext(ctx).Model(&entity.Berkas{}).Where("id = ?", b.ID).
+			Update("tipe_mime", jenis).Error
 	}
 	return nil
 }
