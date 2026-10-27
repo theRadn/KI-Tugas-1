@@ -102,13 +102,82 @@ func main() {
 	router := gin.Default()
 	router.Use(middleware.CORSMiddleware())
 
+<<<<<<< HEAD
 	routes.SetupRoutes(
 		router,
 		db,
+=======
+	api := router.Group("/api")
+	routes.RegisterAuthRoutes(api, db)
+	routes.RegisterBiodataRoutes(api, db)
+	sessionManager := middleware.NewSessionManager(15 * time.Minute)
+
+	handshakeService := service.NewHandshakeService(sessionManager, 15*time.Minute)
+	handshakeController := controller.NewHandshakeController(handshakeService)
+	berandaService := service.NewBerandaService(db)
+	berandaController := controller.NewBerandaController(berandaService)
+	analisisService := service.NewAnalisisService(db)
+	analisisController := controller.NewAnalisisController(analisisService)
+	videoController := controller.NewVideoController(service.NewVideoService("storage/videos"))
+
+	globalLimiter, err := middleware.NewIPRateLimiter(
+		100, 100, time.Minute,
+		10*time.Minute, time.Minute,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer globalLimiter.Close()
+
+	loginLimiter, err := middleware.NewIPRateLimiter(
+		5, 5, time.Minute,
+		10*time.Minute, time.Minute,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer loginLimiter.Close()
+
+	registerLimiter, err := middleware.NewIPRateLimiter(
+		5, 5, time.Minute,
+		10*time.Minute, time.Minute,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer registerLimiter.Close()
+
+	handshakeLimiter, _ := middleware.NewIPRateLimiter(
+		5, 1, time.Minute,
+		5*time.Minute,
+		time.Minute,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer handshakeLimiter.Close()
+
+	limiters := routes.RateLimiters{
+		Global:    globalLimiter,
+		Login:     loginLimiter,
+		Register:  registerLimiter,
+		Handshake: handshakeLimiter,
+	}
+
+	router := gin.Default()
+	router.Use(middleware.CORSMiddleware())
+
+	routes.SetupRoutes(
+		router,
+>>>>>>> d846f13 (video handling)
 		sessionManager,
 		handshakeController,
 		berandaController,
 		analisisController,
+<<<<<<< HEAD
+=======
+		videoController,
+>>>>>>> d846f13 (video handling)
 		limiters,
 	)
 
