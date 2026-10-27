@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/theRadn/KI-Tugas-1/entity"
 	"github.com/theRadn/KI-Tugas-1/service"
 
 	"github.com/gin-gonic/gin"
@@ -21,8 +22,18 @@ func NewBiodataController(
 }
 
 func (c *BiodataController) GetTab(ctx *gin.Context) {
+	// Biodata disimpan dalam tiga versi ciphertext; ?algoritma= memilih
+	// versi yang didekripsi (bawaan AES).
+	algoritma := ctx.DefaultQuery("algoritma", "AES")
+	if algoritma != "AES" && algoritma != "DES" && algoritma != "RC4" {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"message": "algoritma harus AES, DES, atau RC4",
+		})
+		return
+	}
+
 	data, err := c.service.GetTab(
-		ctx.Request.Context(),
+		entity.DenganAlgoritma(ctx.Request.Context(), algoritma),
 		ctx.GetString("userID"),
 		ctx.Param("tab"),
 	)

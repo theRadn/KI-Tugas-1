@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"reflect"
 	"strings"
@@ -14,12 +15,43 @@ import (
 )
 
 // Kolom bertanda `gorm:"serializer:enkripsi"` disimpan sebagai
-// "enc:v1:" + base64(JSON utils.EncryptedData), memakai AES-256-CTR dan
-// HMAC-SHA256 dengan kunci DATABASE_SECRET_AES256. Nilai yang belum
-// berawalan itu dianggap data lama (teks biasa) dan tetap terbaca.
-const awalanEnkripsi = "enc:v1:"
+// "enc:v2:" + base64(JSON {"AES": ..., "DES": ..., "RC4": ...}), yaitu
+// tiga versi ciphertext (AES-256-CTR, DES-CTR, RC4) dari nilai yang sama.
+// Tag HMAC ketiganya memakai kunci AES 32 byte, supaya keaslian versi DES
+// tidak ikut lemah karena kuncinya hanya 8 byte.
+//
+// Format lama tetap terbaca: "enc:v1:" (hanya AES) dan teks biasa. Saat
+// baris disimpan ulang, nilainya otomatis menjadi format v2.
+const (
+	awalanV1 = "enc:v1:"
+	awalanV2 = "enc:v2:"
+)
 
-var errKunciBiodata = errors.New("DATABASE_SECRET_AES256 harus 32 karakter")
+var algoritmaBiodata = []struct {
+	nama    string
+	alg     utils.Algorithm
+	namaEnv string
+	panjang int // 0 berarti bebas, asal tidak kosong
+}{
+	{"AES", utils.AlgorithmAES256CTR, "DATABASE_SECRET_AES256", 32},
+	{"DES", utils.AlgorithmDESCTR, "DATABASE_SECRET_DES", 8},
+	{"RC4", utils.AlgorithmRC4, "DATABASE_SECRET_RC4", 0},
+}
+
+type kunciKonteks struct{}
+
+// DenganAlgoritma memilih versi ciphertext yang didekripsi saat membaca
+// biodata (AES, DES, atau RC4). Tanpa ini, dipakai AES.
+func DenganAlgoritma(ctx context.Context, algoritma string) context.Context {
+	return context.WithValue(ctx, kunciKonteks{}, algoritma)
+}
+
+func algoritmaDari(ctx context.Context) string {
+	if a, ok := ctx.Value(kunciKonteks{}).(string); ok && a != "" {
+		return a
+	}
+	return "AES"
+}
 
 func init() {
 	schema.RegisterSerializer("enkripsi", serializerEnkripsi{})
@@ -27,18 +59,23 @@ func init() {
 
 type serializerEnkripsi struct{}
 
-func kunciBiodata() ([]byte, error) {
-	kunci := []byte(os.Getenv("DATABASE_SECRET_AES256"))
-	if len(kunci) != 32 {
-		return nil, errKunciBiodata
+// kunciBiodata mengembalikan kunci tiap algoritma dan kunci HMAC (AES).
+func kunciBiodata() (map[string][]byte, []byte, error) {
+	kunci := make(map[string][]byte, len(algoritmaBiodata))
+	for _, a := range algoritmaBiodata {
+		k := []byte(os.Getenv(a.namaEnv))
+		if len(k) == 0 || (a.panjang > 0 && len(k) != a.panjang) {
+			return nil, nil, fmt.Errorf("%s belum diatur dengan panjang yang benar", a.namaEnv)
+		}
+		kunci[a.nama] = k
 	}
-	return kunci, nil
+	return kunci, kunci["AES"], nil
 }
 
 func (serializerEnkripsi) Value(
 	_ context.Context, _ *schema.Field, _ reflect.Value, nilai interface{},
 ) (interface{}, error) {
-	kunci, err := kunciBiodata()
+	kunci, kunciMAC, err := kunciBiodata()
 	if err != nil {
 		return nil, err
 	}
@@ -46,15 +83,18 @@ func (serializerEnkripsi) Value(
 	if err != nil {
 		return nil, err
 	}
-	data, err := utils.Encrypt(utils.AlgorithmAES256CTR, kunci, kunci, polos)
+	versi := make(map[string]utils.EncryptedData, len(algoritmaBiodata))
+	for _, a := range algoritmaBiodata {
+		versi[a.nama], err = utils.Encrypt(a.alg, kunci[a.nama], kunciMAC, polos)
+		if err != nil {
+			return nil, err
+		}
+	}
+	amplop, err := json.Marshal(versi)
 	if err != nil {
 		return nil, err
 	}
-	amplop, err := json.Marshal(data)
-	if err != nil {
-		return nil, err
-	}
-	return awalanEnkripsi + base64.StdEncoding.EncodeToString(amplop), nil
+	return awalanV2 + base64.StdEncoding.EncodeToString(amplop), nil
 }
 
 func (serializerEnkripsi) Scan(
@@ -76,27 +116,24 @@ func (serializerEnkripsi) Scan(
 		}
 	}
 
-	if isi, ok := strings.CutPrefix(teks, awalanEnkripsi); ok {
-		kunci, err := kunciBiodata()
-		if err != nil {
-			return err
-		}
-		amplop, err := base64.StdEncoding.DecodeString(isi)
-		if err != nil {
-			return err
-		}
-		var data utils.EncryptedData
-		if err := json.Unmarshal(amplop, &data); err != nil {
-			return err
-		}
-		polos, err := utils.Decrypt(data, kunci, kunci)
+	switch {
+	case strings.HasPrefix(teks, awalanV2):
+		polos, err := bukaV2(strings.TrimPrefix(teks, awalanV2), algoritmaDari(ctx))
 		if err != nil {
 			return err
 		}
 		if err := json.Unmarshal(polos, hasil.Interface()); err != nil {
 			return err
 		}
-	} else if teks != "" {
+	case strings.HasPrefix(teks, awalanV1):
+		polos, err := bukaV1(strings.TrimPrefix(teks, awalanV1))
+		if err != nil {
+			return err
+		}
+		if err := json.Unmarshal(polos, hasil.Interface()); err != nil {
+			return err
+		}
+	case teks != "":
 		if field.FieldType.Kind() == reflect.String {
 			hasil.Elem().SetString(teks)
 		} else {
@@ -106,4 +143,42 @@ func (serializerEnkripsi) Scan(
 
 	field.ReflectValueOf(ctx, dst).Set(hasil.Elem())
 	return nil
+}
+
+func bukaV2(isi, algoritma string) ([]byte, error) {
+	kunci, kunciMAC, err := kunciBiodata()
+	if err != nil {
+		return nil, err
+	}
+	amplop, err := base64.StdEncoding.DecodeString(isi)
+	if err != nil {
+		return nil, err
+	}
+	var versi map[string]utils.EncryptedData
+	if err := json.Unmarshal(amplop, &versi); err != nil {
+		return nil, err
+	}
+	data, ok := versi[algoritma]
+	if !ok || kunci[algoritma] == nil {
+		return nil, errors.New("versi ciphertext " + algoritma + " tidak ada")
+	}
+	return utils.Decrypt(data, kunci[algoritma], kunciMAC)
+}
+
+// bukaV1 membaca format lama yang hanya berisi AES (kunci enkripsi dan
+// HMAC sama-sama kunci AES).
+func bukaV1(isi string) ([]byte, error) {
+	kunci, _, err := kunciBiodata()
+	if err != nil {
+		return nil, err
+	}
+	amplop, err := base64.StdEncoding.DecodeString(isi)
+	if err != nil {
+		return nil, err
+	}
+	var data utils.EncryptedData
+	if err := json.Unmarshal(amplop, &data); err != nil {
+		return nil, err
+	}
+	return utils.Decrypt(data, kunci["AES"], kunci["AES"])
 }
