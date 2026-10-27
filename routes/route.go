@@ -1,9 +1,6 @@
 package routes
 
 import (
-	"log"
-	"net/http"
-
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
@@ -30,23 +27,10 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, sessionManager *middleware.Ses
 	encrypted := api.Group("")
 	encrypted.Use(middleware.Encryption(sessionManager))
 	{
-		encrypted.POST("/hello", hello)
 		RegisterAuthRoutes(encrypted, db, limiters.Login, limiters.Register)
 		RegisterBiodataRoutes(encrypted, db)
 		RegisterBerkasRoutes(encrypted, db)
 		Beranda(encrypted, berandaController)
 		Analisis(encrypted, analisisController)
 	}
-}
-
-func hello(c *gin.Context) {
-	var req struct {
-		Message string `json:"message"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
-		return
-	}
-	log.Printf("[hello] plaintext received from client: %s", req.Message)
-	c.JSON(http.StatusOK, gin.H{"reply": "hi"})
 }
