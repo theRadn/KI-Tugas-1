@@ -3,6 +3,7 @@ package controller
 import (
 	"errors"
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -12,10 +13,11 @@ import (
 
 type VideoController struct {
 	service *service.VideoService
+	berkas  *service.BerkasService
 }
 
-func NewVideoController(service *service.VideoService) *VideoController {
-	return &VideoController{service: service}
+func NewVideoController(service *service.VideoService, berkas *service.BerkasService) *VideoController {
+	return &VideoController{service: service, berkas: berkas}
 }
 
 func (v *VideoController) Start(c *gin.Context) {
@@ -24,15 +26,29 @@ func (v *VideoController) Start(c *gin.Context) {
 		return
 	}
 	var req struct {
-		ChunkCount int   `json:"chunk_count" binding:"required"`
-		SizeBytes  int64 `json:"size_bytes" binding:"required"`
+		ChunkCount int    `json:"chunk_count" binding:"required"`
+		SizeBytes  int64  `json:"size_bytes" binding:"required"`
+		NamaAsli   string `json:"nama_asli" binding:"required,max=255"`
+		TipeMIME   string `json:"tipe_mime" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "chunk_count dan size_bytes diperlukan"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "chunk_count, size_bytes, nama_asli, dan tipe_mime diperlukan"})
+		return
+	}
+	if err := service.ValidasiVideo(req.TipeMIME, req.SizeBytes); err != nil {
+		videoError(c, err)
 		return
 	}
 	id, err := v.service.Start(userID, req.ChunkCount, req.SizeBytes)
 	if err != nil {
+		videoError(c, err)
+		return
+	}
+	// Dicatat di tabel berkas supaya muncul di daftar Berkas dan Beranda,
+	// dan ikut terhapus lewat DELETE /api/berkas/:id.
+	folder := v.service.Folder(userID, id)
+	if err := v.berkas.CatatVideo(c.Request.Context(), userID, id, req.NamaAsli, req.TipeMIME, req.SizeBytes, folder); err != nil {
+		_ = os.RemoveAll(folder)
 		videoError(c, err)
 		return
 	}
@@ -51,9 +67,26 @@ func (v *VideoController) PutChunk(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "data base64 diperlukan"})
 		return
 	}
+	if index == 0 {
+		if err := v.berkas.CekAwalVideo(c.Request.Context(), userID, videoID, req.Data); err != nil {
+			// Isi bukan video: buang baris dan foldernya agar tidak tersisa
+			// unggahan "belum selesai".
+			if errors.Is(err, service.ErrBerkasTidakSah) {
+				_ = v.berkas.Hapus(c.Request.Context(), userID, videoID.String())
+			}
+			videoError(c, err)
+			return
+		}
+	}
 	if err := v.service.PutChunk(userID, videoID, index, req.Data); err != nil {
 		videoError(c, err)
 		return
+	}
+	if lengkap, err := v.service.Lengkap(userID, videoID); err == nil && lengkap {
+		if err := v.berkas.TandaiVideoTerunggah(c.Request.Context(), userID, videoID); err != nil {
+			videoError(c, err)
+			return
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"index": index})
 }
@@ -103,8 +136,11 @@ func videoError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, service.ErrVideoNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-	case errors.Is(err, service.ErrInvalidVideoChunk):
+	case errors.Is(err, service.ErrInvalidVideoChunk),
+		errors.Is(err, service.ErrBerkasTidakSah):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	case errors.Is(err, service.ErrBerkasNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 	default:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "pemrosesan video gagal"})
 	}

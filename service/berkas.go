@@ -33,6 +33,7 @@ var (
 	ErrBerkasNotFound  = errors.New("berkas tidak ditemukan")
 	folderPenyimpanan  = filepath.Join("storage", "berkas")
 	tipeGambar         = []string{"image/jpeg", "image/png"}
+	tipeVideo          = []string{"video/mp4", "video/webm"}
 	algoritmaBerkas    = []string{"AES", "DES", "RC4"}
 	panjangKunciBerkas = map[string]int{"AES": 32, "DES": 8}
 )
@@ -235,10 +236,99 @@ func (s *BerkasService) Unggah(ctx context.Context, userID uuid.UUID, kode strin
 		return dto.UnggahBerkasResponse{}, err
 	}
 	for _, b := range lama {
-		_ = os.RemoveAll(filepath.Join(folderPenyimpanan, b.ID.String()))
+		hapusFolder(b)
 	}
 	res.BerkasResponse = keResponse(berkas)
 	return res, nil
+}
+
+// hapusFolder membuang ciphertext di disk: gambar di storage/berkas/<id>,
+// video di folder potongan yang tercatat di FilePath.
+func hapusFolder(b entity.Berkas) {
+	_ = os.RemoveAll(filepath.Join(folderPenyimpanan, b.ID.String()))
+	if b.FilePath != "" {
+		_ = os.RemoveAll(b.FilePath)
+	}
+}
+
+// Video diunggah per potongan lewat /api/videos. Batas 10 MB menjaga
+// jumlah potongan di bawah limiter global (100 permintaan per menit).
+const (
+	KodeVideo     = "video_dokumentasi"
+	MaksVideoByte = 10 << 20
+)
+
+func ValidasiVideo(tipe string, ukuran int64) error {
+	if !slices.Contains(tipeVideo, tipe) {
+		return fmt.Errorf("%w: format video harus MP4 atau WebM", ErrBerkasTidakSah)
+	}
+	if ukuran <= 0 || ukuran > MaksVideoByte {
+		return fmt.Errorf("%w: ukuran video maksimal 10 MB", ErrBerkasTidakSah)
+	}
+	return nil
+}
+
+// CatatVideo membuat baris berkas untuk video baru (status "mengunggah")
+// dan menggantikan video sebelumnya milik pengguna yang sama.
+func (s *BerkasService) CatatVideo(ctx context.Context, userID, videoID uuid.UUID, nama, tipe string, ukuran int64, folder string) error {
+	biodata, err := s.biodataRepo.PastikanBiodata(ctx, userID)
+	if err != nil {
+		return err
+	}
+	var lama []entity.Berkas
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("biodata_id = ? AND kode_berkas = ?", biodata.ID, KodeVideo).Find(&lama).Error; err != nil {
+			return err
+		}
+		for _, b := range lama {
+			if err := hapusBaris(tx, b.ID); err != nil {
+				return err
+			}
+		}
+		berkas := entity.Berkas{
+			BiodataID: biodata.ID, KodeBerkas: KodeVideo, NamaAsli: filepath.Base(nama),
+			UkuranByte: ukuran, TipeMIME: tipe, Status: "mengunggah", FilePath: folder,
+		}
+		berkas.ID = videoID
+		return tx.Create(&berkas).Error
+	})
+	if err != nil {
+		return err
+	}
+	for _, b := range lama {
+		hapusFolder(b)
+	}
+	return nil
+}
+
+func (s *BerkasService) videoMilik(ctx context.Context, userID, videoID uuid.UUID) (entity.Berkas, error) {
+	b, err := s.milikPengguna(ctx, userID, videoID.String())
+	if err == nil && b.KodeBerkas != KodeVideo {
+		return entity.Berkas{}, ErrBerkasNotFound
+	}
+	return b, err
+}
+
+// CekAwalVideo memeriksa isi asli potongan pertama, bukan hanya tipe yang
+// diakui klien.
+func (s *BerkasService) CekAwalVideo(ctx context.Context, userID, videoID uuid.UUID, potongan []byte) error {
+	b, err := s.videoMilik(ctx, userID, videoID)
+	if err != nil {
+		return err
+	}
+	if http.DetectContentType(potongan) != b.TipeMIME {
+		return fmt.Errorf("%w: isi berkas bukan video %s", ErrBerkasTidakSah, b.TipeMIME)
+	}
+	return nil
+}
+
+func (s *BerkasService) TandaiVideoTerunggah(ctx context.Context, userID, videoID uuid.UUID) error {
+	if _, err := s.videoMilik(ctx, userID, videoID); err != nil {
+		return err
+	}
+	sekarang := time.Now()
+	return s.db.WithContext(ctx).Model(&entity.Berkas{}).Where("id = ?", videoID).
+		Updates(map[string]any{"status": "terunggah", "diunggah_pada": &sekarang}).Error
 }
 
 // hapusBaris menghapus berkas beserta enkripsi dan hasil analisisnya.
@@ -346,6 +436,6 @@ func (s *BerkasService) Hapus(ctx context.Context, userID uuid.UUID, rawID strin
 	if err != nil {
 		return err
 	}
-	_ = os.RemoveAll(filepath.Join(folderPenyimpanan, b.ID.String()))
+	hapusFolder(b)
 	return nil
 }

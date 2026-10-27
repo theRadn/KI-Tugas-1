@@ -188,6 +188,26 @@ func (s *VideoService) manifest(userID, videoID uuid.UUID) (videoManifest, error
 	return manifest, nil
 }
 
+// Folder mengembalikan lokasi potongan video, dipakai saat video dicatat
+// di tabel berkas supaya ikut terhapus bersama barisnya.
+func (s *VideoService) Folder(userID, videoID uuid.UUID) string {
+	return s.videoDir(userID, videoID)
+}
+
+// Lengkap bernilai true bila semua potongan sudah tersimpan.
+func (s *VideoService) Lengkap(userID, videoID uuid.UUID) (bool, error) {
+	manifest, err := s.manifest(userID, videoID)
+	if err != nil {
+		return false, err
+	}
+	for i := 0; i < manifest.ChunkCount; i++ {
+		if _, err := os.Stat(s.chunkPath(userID, videoID, i)); err != nil {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
 func (s *VideoService) videoDir(userID, videoID uuid.UUID) string {
 	return filepath.Join(s.root, userID.String(), videoID.String())
 }

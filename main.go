@@ -54,7 +54,10 @@ func main() {
 	berandaController := controller.NewBerandaController(berandaService)
 	analisisService := service.NewAnalisisService(db)
 	analisisController := controller.NewAnalisisController(analisisService)
-	videoController := controller.NewVideoController(service.NewVideoService("storage/videos"))
+	videoController := controller.NewVideoController(
+		service.NewVideoService("storage/videos"),
+		service.NewBerkasService(db),
+	)
 
 	globalLimiter, err := middleware.NewIPRateLimiter(
 		100, 100, time.Minute,
