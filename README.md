@@ -26,6 +26,10 @@ Butuh CGO (gcc) karena memakai `go-sqlite3`.
   dan RC4 (kunci per berkas lewat HKDF), lalu hanya ciphertext yang disimpan di
   `storage/berkas/<id>/`. Isi berkas diperiksa (`DetectContentType`, ukuran,
   dimensi foto) sebelum disimpan.
+- **Enkripsi biodata.** 101 kolom data pribadi (NIK, alamat, kesehatan,
+  penghasilan, dan lain-lain) disimpan sebagai `enc:v1:` + ciphertext
+  AES-256-CTR + HMAC lewat serializer GORM `enkripsi` (`entity/enkripsi.go`).
+  Kunci relasi, nomor pendaftaran, dan tanggal dibiarkan polos untuk pencarian.
 - **Autentikasi.** JWT (120 menit) di header `Authorization: Bearer`.
   Kata sandi di-hash dengan bcrypt.
 - **Rate limit.** Global 100/menit, masuk dan daftar 5/menit, handshake
