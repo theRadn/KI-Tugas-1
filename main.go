@@ -58,6 +58,8 @@ func main() {
 		service.NewVideoService("storage/videos"),
 		service.NewBerkasService(db),
 	)
+	documentService := service.NewDocumentService("storage/documents")
+	documentController := controller.NewDocumentController(documentService)
 
 	globalLimiter, err := middleware.NewIPRateLimiter(
 		100, 100, time.Minute,
@@ -114,6 +116,7 @@ func main() {
 		berandaController,
 		analisisController,
 		videoController,
+		documentController,
 		limiters,
 	)
 
