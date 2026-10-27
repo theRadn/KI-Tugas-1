@@ -13,7 +13,7 @@ type BiodataKeluarga struct {
 	AyahNIK                string     `gorm:"type:varchar(16);serializer:enkripsi" json:"ayah_nik"`
 	AyahNama               string     `gorm:"type:varchar(255);serializer:enkripsi" json:"ayah_nama"`
 	AyahTempatLahir        string     `gorm:"type:varchar(100);serializer:enkripsi" json:"ayah_tempat_lahir"`
-	AyahTanggalLahir       *time.Time `gorm:"type:date;serializer:enkripsi" json:"ayah_tanggal_lahir"`
+	AyahTanggalLahir       *time.Time `gorm:"type:text;serializer:enkripsi" json:"ayah_tanggal_lahir"`
 	AyahPekerjaan          string     `gorm:"type:varchar(255);serializer:enkripsi" json:"ayah_pekerjaan"`
 	AyahInstansi           string     `gorm:"type:varchar(255);serializer:enkripsi" json:"ayah_instansi"`
 	AyahPendidikanTerakhir string     `gorm:"type:varchar(50);serializer:enkripsi" json:"ayah_pendidikan_terakhir"`
@@ -24,7 +24,7 @@ type BiodataKeluarga struct {
 	IbuNIK                string     `gorm:"type:varchar(16);serializer:enkripsi" json:"ibu_nik"`
 	IbuNama               string     `gorm:"type:varchar(255);serializer:enkripsi" json:"ibu_nama"`
 	IbuTempatLahir        string     `gorm:"type:varchar(100);serializer:enkripsi" json:"ibu_tempat_lahir"`
-	IbuTanggalLahir       *time.Time `gorm:"type:date;serializer:enkripsi" json:"ibu_tanggal_lahir"`
+	IbuTanggalLahir       *time.Time `gorm:"type:text;serializer:enkripsi" json:"ibu_tanggal_lahir"`
 	IbuPekerjaan          string     `gorm:"type:varchar(255);serializer:enkripsi" json:"ibu_pekerjaan"`
 	IbuInstansi           string     `gorm:"type:varchar(255);serializer:enkripsi" json:"ibu_instansi"`
 	IbuPendidikanTerakhir string     `gorm:"type:varchar(50);serializer:enkripsi" json:"ibu_pendidikan_terakhir"`

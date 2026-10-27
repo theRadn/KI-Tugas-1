@@ -25,7 +25,7 @@ type Biodata struct {
 	StatusPernikahan string     `gorm:"type:varchar(50);serializer:enkripsi" json:"status_pernikahan"`
 	JenisKelamin     string     `gorm:"type:varchar(20);serializer:enkripsi" json:"jenis_kelamin"`
 	Agama            string     `gorm:"type:varchar(50);serializer:enkripsi" json:"agama"`
-	TanggalLahir     *time.Time `gorm:"type:date;serializer:enkripsi" json:"tanggal_lahir"`
+	TanggalLahir     *time.Time `gorm:"type:text;serializer:enkripsi" json:"tanggal_lahir"`
 	NegaraLahir      string     `gorm:"type:varchar(100);serializer:enkripsi" json:"negara_lahir"`
 	ProvinsiLahir    string     `gorm:"type:varchar(100);serializer:enkripsi" json:"provinsi_lahir"`
 	KotaLahir        string     `gorm:"type:varchar(100);serializer:enkripsi" json:"kota_lahir"`
