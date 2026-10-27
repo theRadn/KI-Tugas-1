@@ -1,10 +1,11 @@
 package controller
 
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"errors"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	// DB
 	"github.com/theRadn/KI-Tugas-1/dto"
@@ -90,11 +91,18 @@ func (c *AuthController) Masuk(ctx *gin.Context) {
 		return
 	}
 
+	refreshToken, err := utils.GenerateRefreshToken(user.ID, "user")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"message": "Login gagal"})
+		return
+	}
+
 	response := dto.AuthResponse{
 		ID:           user.ID.String(),
 		NamaPengguna: user.NamaPengguna,
 		Email:        user.Email,
-		Token:        token,
+		AccessToken:  token,
+		RefreshToken: refreshToken,
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
@@ -135,46 +143,73 @@ func (c *AuthController) LupaKataSandi(ctx *gin.Context) {
 	})
 }
 
-
 func (c *AuthController) GantiKataSandi(ctx *gin.Context) {
-    var req dto.GantiKataSandiRequest
+	var req dto.GantiKataSandiRequest
 
-    if err := ctx.ShouldBindJSON(&req); err != nil {
-        ctx.JSON(http.StatusBadRequest, gin.H{
-            "message": "Data ganti kata sandi tidak valid",
-            "error":   err.Error(),
-        })
-        return
-    }
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"message": "Data ganti kata sandi tidak valid",
+			"error":   err.Error(),
+		})
+		return
+	}
 
-    // AuthMiddleware menyimpan userID sebagai teks.
-    idTeks := ctx.GetString("userID")
-    userID, err := uuid.Parse(idTeks)
-    if err != nil {
-        ctx.JSON(http.StatusUnauthorized, gin.H{"message": "Identitas pengguna tidak valid"})
-        return
-    }
+	// AuthMiddleware menyimpan userID sebagai teks.
+	idTeks := ctx.GetString("userID")
+	userID, err := uuid.Parse(idTeks)
+	if err != nil {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"message": "Identitas pengguna tidak valid"})
+		return
+	}
 
-    err = c.service.GantiKataSandi(
-        ctx.Request.Context(),
-        userID,
-        req,
-    )
-    if err != nil {
-        if err.Error() == "kata sandi lama tidak sesuai" {
-            ctx.JSON(http.StatusBadRequest, gin.H{
-                "message": err.Error(),
-            })
-            return
-        }
+	err = c.service.GantiKataSandi(
+		ctx.Request.Context(),
+		userID,
+		req,
+	)
+	if err != nil {
+		if err.Error() == "kata sandi lama tidak sesuai" {
+			ctx.JSON(http.StatusBadRequest, gin.H{
+				"message": err.Error(),
+			})
+			return
+		}
 
-        ctx.JSON(http.StatusInternalServerError, gin.H{
-            "message": "Gagal mengganti kata sandi",
-        })
-        return
-    }
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Gagal mengganti kata sandi",
+		})
+		return
+	}
 
-    ctx.JSON(http.StatusOK, gin.H{
-        "message": "Kata sandi berhasil diperbarui",
-    })
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "Kata sandi berhasil diperbarui",
+	})
 }
+
+func (c *AuthController) Refresh(ctx *gin.Context) {
+	var req dto.RefreshTokenRequest
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"message": "Refresh token wajib diisi",
+		})
+		return
+	}
+
+	result, err := c.service.RefreshToken(
+		ctx.Request.Context(),
+		req,
+	)
+	if err != nil {
+		ctx.JSON(http.StatusUnauthorized, gin.H{
+			"message": "Refresh token tidak valid atau kedaluwarsa",
+		})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "Token berhasil diperbarui",
+		"data":    result,
+	})
+}
+

@@ -14,6 +14,7 @@ type RateLimiters struct {
 	Global    *middleware.IPRateLimiter
 	Login     *middleware.IPRateLimiter
 	Register  *middleware.IPRateLimiter
+	Refresh   *middleware.IPRateLimiter
 	Handshake *middleware.IPRateLimiter
 	// Potongan video dan dokumen: satu berkas 50 MB sudah 100 permintaan,
 	// jadi rute potongan memakai kuota sendiri dan dilewati limiter global.
@@ -40,7 +41,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, sessionManager *middleware.Ses
 	encrypted := api.Group("")
 	encrypted.Use(middleware.Encryption(sessionManager))
 	{
-		RegisterAuthRoutes(encrypted, db, limiters.Login, limiters.Register)
+		RegisterAuthRoutes(encrypted, db, limiters.Login, limiters.Register, limiters.Refresh)
 		RegisterBiodataRoutes(encrypted, db)
 		RegisterBerkasRoutes(encrypted, db)
 		Beranda(encrypted, berandaController)

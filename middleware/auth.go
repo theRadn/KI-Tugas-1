@@ -40,6 +40,15 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		tokenUse, ok := claims["token_use"].(string)
+		if !ok || tokenUse != "access" {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": pesanTokenTidakValid,
+			})
+			c.Abort()
+			return
+		}
+
 		subRaw, exists := claims["sub"]
 		if !exists || subRaw == nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": pesanTokenTidakValid})

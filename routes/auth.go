@@ -16,6 +16,7 @@ func RegisterAuthRoutes(
 	db *gorm.DB,
 	loginLimiter *middleware.IPRateLimiter,
 	registerLimiter *middleware.IPRateLimiter,
+	refreshLimiter *middleware.IPRateLimiter,
 ) {
 	authRepository := repository.NewAuthRepository(db)
 	authService := service.NewAuthService(authRepository)
@@ -28,5 +29,6 @@ func RegisterAuthRoutes(
 		auth.POST("/keluar", authController.Keluar)
 		auth.POST("/lupa_katasandi", authController.LupaKataSandi)
 		auth.PUT("/ganti-katasandi", middleware.AuthMiddleware(), authController.GantiKataSandi)
+		auth.POST("/refresh", refreshLimiter.Middleware(), authController.Refresh)
 	}
 }

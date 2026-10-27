@@ -81,6 +81,15 @@ func main() {
 	}
 	defer registerLimiter.Close()
 
+	refreshLimiter, err := middleware.NewIPRateLimiter(
+		10, 10, time.Minute,
+		10*time.Minute, time.Minute,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer refreshLimiter.Close()
+
 	handshakeLimiter, err := middleware.NewIPRateLimiter(
 		5, 1, time.Minute,
 		5*time.Minute,
@@ -106,6 +115,7 @@ func main() {
 		Global:    globalLimiter,
 		Login:     loginLimiter,
 		Register:  registerLimiter,
+		Refresh:   refreshLimiter,
 		Handshake: handshakeLimiter,
 		Potongan:  potonganLimiter,
 	}
