@@ -9,6 +9,7 @@ import (
 	// DB
 	"github.com/theRadn/KI-Tugas-1/dto"
 	"github.com/theRadn/KI-Tugas-1/service"
+	"github.com/theRadn/KI-Tugas-1/utils"
 )
 
 type AuthController struct {
@@ -83,10 +84,17 @@ func (c *AuthController) Masuk(ctx *gin.Context) {
 		return
 	}
 
+	token, err := utils.GenerateToken(user.ID, "user")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"message": "Login gagal"})
+		return
+	}
+
 	response := dto.AuthResponse{
 		ID:           user.ID.String(),
 		NamaPengguna: user.NamaPengguna,
 		Email:        user.Email,
+		Token:        token,
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
@@ -112,15 +120,10 @@ func (c *AuthController) LupaKataSandi(ctx *gin.Context) {
 		return
 	}
 
+	// Email terdaftar atau tidak dijawab sama, supaya endpoint ini
+	// tidak bisa dipakai menebak email mana yang punya akun.
 	err := c.service.LupaKataSandi(ctx.Request.Context(), req)
-	if err != nil {
-		if errors.Is(err, service.ErrEmailNotFound) {
-			ctx.JSON(http.StatusNotFound, gin.H{
-				"message": "Email tidak ditemukan",
-			})
-			return
-		}
-
+	if err != nil && !errors.Is(err, service.ErrEmailNotFound) {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"message": "Permintaan gagal diproses",
 		})
@@ -128,7 +131,7 @@ func (c *AuthController) LupaKataSandi(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Email ditemukan; fitur reset belum tersedia",
+		"message": "Jika email terdaftar, instruksi reset akan dikirim",
 	})
 }
 
@@ -144,25 +147,15 @@ func (c *AuthController) GantiKataSandi(ctx *gin.Context) {
         return
     }
 
-    // Ambil ID pengguna dari konteks autentikasi.
-    // Nama key harus disesuaikan dengan middleware JWT proyekmu.
-    rawUserID, exists := ctx.Get("userID")
-    if !exists {
-        ctx.JSON(http.StatusUnauthorized, gin.H{
-            "message": "Pengguna belum terautentikasi",
-        })
+    // AuthMiddleware menyimpan userID sebagai teks.
+    idTeks := ctx.GetString("userID")
+    userID, err := uuid.Parse(idTeks)
+    if err != nil {
+        ctx.JSON(http.StatusUnauthorized, gin.H{"message": "Identitas pengguna tidak valid"})
         return
     }
 
-    userID, ok := rawUserID.(uuid.UUID)
-    if !ok {
-        ctx.JSON(http.StatusUnauthorized, gin.H{
-            "message": "Identitas pengguna tidak valid",
-        })
-        return
-    }
-
-    err := c.service.GantiKataSandi(
+    err = c.service.GantiKataSandi(
         ctx.Request.Context(),
         userID,
         req,

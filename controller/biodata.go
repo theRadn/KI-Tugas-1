@@ -23,7 +23,7 @@ func NewBiodataController(
 func (c *BiodataController) GetTab(ctx *gin.Context) {
 	data, err := c.service.GetTab(
 		ctx.Request.Context(),
-		ctx.Query("user_id"),
+		ctx.GetString("userID"),
 		ctx.Param("tab"),
 	)
 
@@ -49,7 +49,7 @@ func (c *BiodataController) SaveTab(ctx *gin.Context) {
 
 	err = c.service.SaveTab(
 		ctx.Request.Context(),
-		ctx.Query("user_id"),
+		ctx.GetString("userID"),
 		ctx.Param("tab"),
 		body,
 	)
