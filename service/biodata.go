@@ -98,6 +98,7 @@ func (s *BiodataService) GetTab(
 			"no_bpjs":            b.NoBPJS,
 			"sumber_informasi":   b.SumberInformasi,
 			"daftar_asrama":      b.DaftarAsrama,
+			"diubah_pada":        b.DiubahPada,
 		}, nil
 
 	case "pendidikan":
