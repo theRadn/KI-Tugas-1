@@ -53,7 +53,7 @@ All endpoints are under `/api` and encrypted, except for `/handshake`.
 | Method | Path | Login Required |
 | --- | --- | --- |
 | POST | `/handshake` | - |
-| POST | `/auth/daftar`, `/auth/masuk`, `/auth/keluar`, `/auth/lupa_katasandi` | - |
+| POST | `/auth/daftar`, `/auth/masuk`, `/auth/keluar`, `/auth/lupa_katasandi`, `/auth/refresh` | - |
 | PUT | `/auth/ganti-katasandi` | yes |
 | GET, PUT | `/biodata/:tab` (`data-diri`, `pendidikan`, `keluarga`, `rumah`, `catatan-khusus`, `pendukung`) | yes |
 | GET | `/berkas` | yes |
