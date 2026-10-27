@@ -39,16 +39,18 @@ var (
 )
 
 type aturanBerkas struct {
-	tipe         []string
-	minKB, maxKB int64
-	persegi      int // dimensi wajib (px), 0 berarti bebas
+	tipe    []string
+	maxKB   int64
+	persegi int // dimensi wajib (px), 0 berarti bebas
 }
 
 // Aturan mengikuti kontrak-data.md bagian 5.2, 5.5, dan 6.
 // Dokumen dan video (bagian "Lainnya") belum didukung karena melebihi
 // batas 1 MiB amplop enkripsi in-transit.
 func aturanUntuk(kode string) (aturanBerkas, bool) {
-	standar := aturanBerkas{tipe: tipeGambar, minKB: 200, maxKB: 500}
+	// Tanpa batas minimum: pengguna tidak bisa menyesuaikan ukuran berkas
+	// yang terlalu kecil, jadi cukup dibatasi atasnya.
+	standar := aturanBerkas{tipe: tipeGambar, maxKB: 500}
 	if n, ok := strings.CutPrefix(kode, "rapor_sem_"); ok {
 		return standar, len(n) == 1 && n >= "1" && n <= "7"
 	}
@@ -122,9 +124,8 @@ func periksaIsi(aturan aturanBerkas, req dto.UnggahBerkasRequest) ([]byte, error
 	if err != nil {
 		return nil, fmt.Errorf("%w: isi berkas tidak valid", ErrBerkasTidakSah)
 	}
-	kb := int64(len(isi)) / 1024
-	if len(isi) == 0 || kb < aturan.minKB || int64(len(isi)) > aturan.maxKB*1024 {
-		return nil, fmt.Errorf("%w: ukuran harus %d sampai %d KB", ErrBerkasTidakSah, aturan.minKB, aturan.maxKB)
+	if len(isi) == 0 || int64(len(isi)) > aturan.maxKB*1024 {
+		return nil, fmt.Errorf("%w: ukuran berkas maksimal %d KB", ErrBerkasTidakSah, aturan.maxKB)
 	}
 	asli := http.DetectContentType(isi)
 	if !slices.Contains(aturan.tipe, asli) || asli != req.TipeMIME {
