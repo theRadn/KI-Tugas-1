@@ -27,8 +27,10 @@ Butuh CGO (gcc) karena memakai `go-sqlite3`.
   `storage/berkas/<id>/`. Isi berkas diperiksa (`DetectContentType`, ukuran,
   dimensi foto) sebelum disimpan.
 - **Enkripsi biodata.** 101 kolom data pribadi (NIK, alamat, kesehatan,
-  penghasilan, dan lain-lain) disimpan sebagai `enc:v1:` + ciphertext
-  AES-256-CTR + HMAC lewat serializer GORM `enkripsi` (`entity/enkripsi.go`).
+  penghasilan, dan lain-lain) disimpan sebagai `enc:v2:` berisi tiga
+  ciphertext (AES-256-CTR, DES-CTR, RC4) dengan tag HMAC berkunci AES, lewat
+  serializer GORM `enkripsi` (`entity/enkripsi.go`). `GET /biodata/:tab?algoritma=`
+  memilih versi yang didekripsi (bawaan AES).
   Kunci relasi, nomor pendaftaran, dan tanggal dibiarkan polos untuk pencarian.
 - **Autentikasi.** JWT (120 menit) di header `Authorization: Bearer`.
   Kata sandi di-hash dengan bcrypt.
