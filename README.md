@@ -58,8 +58,8 @@ All endpoints are under `/api` and encrypted, except for `/handshake`.
 | GET, PUT | `/biodata/:tab` (`data-diri`, `pendidikan`, `keluarga`, `rumah`, `catatan-khusus`, `pendukung`) | yes |
 | GET | `/berkas` | yes |
 | POST | `/berkas/:kode` (body `nama_asli`, `tipe_mime`, `isi_base64`) | yes |
-| GET | `/berkas/:id/unduh?algoritma=AES|DES|RC4` | yes |
-| GET | `/berkas/:id/ciphertext?algoritma=AES|DES|RC4` | yes |
+| GET | `/berkas/:id/unduh?algoritma=AES\|DES\|RC4` | yes |
+| GET | `/berkas/:id/ciphertext?algoritma=AES\|DES\|RC4` | yes |
 | DELETE | `/berkas/:id` | yes |
 | POST | `/videos` (body `chunk_count`, `size_bytes`, `nama_asli`, `tipe_mime`) | yes |
 | PUT, GET | `/videos/:id/chunks/:index` (`data` base64, GET with `?algoritma=`) | yes |
