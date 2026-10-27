@@ -33,6 +33,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, sessionManager *middleware.Ses
 		encrypted.POST("/hello", hello)
 		RegisterAuthRoutes(encrypted, db, limiters.Login, limiters.Register)
 		RegisterBiodataRoutes(encrypted, db)
+		RegisterBerkasRoutes(encrypted, db)
 		Beranda(encrypted, berandaController)
 		Analisis(encrypted, analisisController)
 	}

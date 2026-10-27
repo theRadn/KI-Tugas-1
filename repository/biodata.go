@@ -215,3 +215,28 @@ func nomorPendaftaranBaru(tx *gorm.DB) (string, error) {
 	}
 	return fmt.Sprintf("SIPMABA-%d-%06d", time.Now().Year(), jumlah+1), nil
 }
+
+// PastikanBiodata mengambil baris biodata pengguna, atau membuatnya
+// (beserta nomor pendaftaran) bila belum ada. Dipakai saat unggah berkas.
+func (r *BiodataRepository) PastikanBiodata(
+	ctx context.Context,
+	userID uuid.UUID,
+) (*entity.Biodata, error) {
+	var b entity.Biodata
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		err := tx.Where("user_id = ?", userID).First(&b).Error
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		no, err := nomorPendaftaranBaru(tx)
+		if err != nil {
+			return err
+		}
+		b = entity.Biodata{UserID: userID, NoPendaftaran: no}
+		return tx.Create(&b).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &b, nil
+}
