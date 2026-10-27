@@ -97,12 +97,13 @@ func (c *AuthController) Masuk(ctx *gin.Context) {
 		return
 	}
 
+	ctx.SetCookie("access_token", token, 15*60, "/", "", false, true)
+	ctx.SetCookie("refresh_token", refreshToken, 7*24*60*60, "/", "", false, true)
+
 	response := dto.AuthResponse{
 		ID:           user.ID.String(),
 		NamaPengguna: user.NamaPengguna,
 		Email:        user.Email,
-		AccessToken:  token,
-		RefreshToken: refreshToken,
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
@@ -112,7 +113,8 @@ func (c *AuthController) Masuk(ctx *gin.Context) {
 }
 
 func (c *AuthController) Keluar(ctx *gin.Context) {
-	// Belum ada session atau token yang diinvalidasi.
+	ctx.SetCookie("access_token", "", -1, "/", "", false, true)
+	ctx.SetCookie("refresh_token", "", -1, "/", "", false, true)
 	ctx.JSON(http.StatusOK, gin.H{
 		"message": "Berhasil keluar",
 	})
@@ -187,13 +189,16 @@ func (c *AuthController) GantiKataSandi(ctx *gin.Context) {
 }
 
 func (c *AuthController) Refresh(ctx *gin.Context) {
-	var req dto.RefreshTokenRequest
-
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": "Refresh token wajib diisi",
+	refreshToken, err := ctx.Cookie("refresh_token")
+	if err != nil {
+		ctx.JSON(http.StatusUnauthorized, gin.H{
+			"message": "Refresh token tidak valid",
 		})
 		return
+	}
+
+	req := dto.RefreshTokenRequest{
+		RefreshToken: refreshToken,
 	}
 
 	result, err := c.service.RefreshToken(
@@ -207,9 +212,10 @@ func (c *AuthController) Refresh(ctx *gin.Context) {
 		return
 	}
 
+	ctx.SetCookie("access_token", result.AccessToken, result.ExpiresIn, "/", "", false, true)
+	ctx.SetCookie("refresh_token", result.RefreshToken, 7*24*60*60, "/", "", false, true)
+
 	ctx.JSON(http.StatusOK, gin.H{
 		"message": "Token berhasil diperbarui",
-		"data":    result,
 	})
 }
-
