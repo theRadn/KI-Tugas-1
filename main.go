@@ -2,13 +2,15 @@ package main
 
 import (
 	"flag"
-	"fmt"
+	"log"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/theRadn/KI-Tugas-1/config"
 	"github.com/theRadn/KI-Tugas-1/controller"
 	"github.com/theRadn/KI-Tugas-1/middleware"
 	"github.com/theRadn/KI-Tugas-1/migration"
+	"github.com/theRadn/KI-Tugas-1/routes"
 	"github.com/theRadn/KI-Tugas-1/seeding"
 	"github.com/theRadn/KI-Tugas-1/service"
 	"gorm.io/gorm"
@@ -39,18 +41,14 @@ func main() {
 
 	sessionManager := middleware.NewSessionManager(15 * time.Minute)
 
-	handshakeService := service.NewHandshakeService(
-		sessionManager,
-		15*time.Minute,
-	)
+	handshakeService := service.NewHandshakeService(sessionManager, 15*time.Minute)
+	handshakeController := controller.NewHandshakeController(handshakeService)
 
-	handshakeController := controller.NewHandshakeController(
-		handshakeService,
-	)
+	router := gin.Default()
 
-	fmt.Println(handshakeController)
+	routes.SetupRoutes(router, sessionManager, handshakeController)
 
-	fmt.Println("Hello, World!")
+	log.Fatal(router.Run(":8080"))
 }
 
 func runMigrations(db *gorm.DB) {
