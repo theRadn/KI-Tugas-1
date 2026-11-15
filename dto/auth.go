@@ -20,8 +20,6 @@ type AuthResponse struct {
 	ID           string `json:"id"`
 	NamaPengguna string `json:"nama_pengguna"`
 	Email        string `json:"email"`
-	AccessToken  string `json:"access_token,omitempty"`
-	RefreshToken string `json:"refresh_token,omitempty"`
 }
 
 type GantiKataSandiRequest struct {

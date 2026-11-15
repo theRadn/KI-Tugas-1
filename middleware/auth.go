@@ -3,7 +3,6 @@ package middleware
 import (
 	"net/http"
 	"os"
-	"strings"
 
 	"github.com/theRadn/KI-Tugas-1/utils"
 
@@ -16,21 +15,13 @@ const pesanTokenTidakValid = "Sesi login tidak valid atau kedaluwarsa, silakan m
 
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
+		tokenString, err := c.Cookie("access_token")
+		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Silakan masuk terlebih dahulu"})
 			c.Abort()
 			return
 		}
 
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": pesanTokenTidakValid})
-			c.Abort()
-			return
-		}
-
-		tokenString := parts[1]
 		secret := os.Getenv("JWT_SECRET")
 
 		claims, err := utils.VerifyToken(tokenString, secret)
