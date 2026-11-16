@@ -143,12 +143,29 @@ func periksaIsi(aturan aturanBerkas, req dto.UnggahBerkasRequest) ([]byte, error
 // Unggah mengenkripsi berkas dengan ketiga algoritma dan hanya menyimpan
 // ciphertext-nya. Berkas asli tidak pernah ditulis ke disk. Unggahan
 // ulang dengan kode yang sama menggantikan berkas lama.
-func (s *BerkasService) Unggah(ctx context.Context, userID uuid.UUID, kode string, req dto.UnggahBerkasRequest) (dto.UnggahBerkasResponse, error) {
+func (s *BerkasService) Unggah(
+	ctx context.Context,
+	userID uuid.UUID,
+	kode string,
+	req dto.UnggahBerkasRequest,
+) (dto.UnggahBerkasResponse, error) {
 	aturan, ok := aturanUntuk(kode)
 	if !ok {
 		return dto.UnggahBerkasResponse{}, ErrKodeBerkas
 	}
+
 	isi, err := periksaIsi(aturan, req)
+	if err != nil {
+		return dto.UnggahBerkasResponse{}, err
+	}
+
+	userKEK, err := unwrapUserKEK(s.db.WithContext(ctx), userID)
+	if err != nil {
+		return dto.UnggahBerkasResponse{}, err
+	}
+	defer clear(userKEK)
+
+	fileID, err := uuid.NewV7()
 	if err != nil {
 		return dto.UnggahBerkasResponse{}, err
 	}
@@ -157,18 +174,57 @@ func (s *BerkasService) Unggah(ctx context.Context, userID uuid.UUID, kode strin
 		alg  string
 		mode utils.Algorithm
 		data utils.EncryptedData
+		wrap []byte
 	}
-	var semua []hasilEnkripsi
-	for _, a := range algoritmaBerkas {
-		alg, kunci, err := kunciBerkas(a)
+
+	semua := make([]hasilEnkripsi, 0, len(algoritmaBerkas))
+	for _, namaAlgoritma := range algoritmaBerkas {
+		mode, _ := algoritmaDanSecret(namaAlgoritma)
+		if mode == "" {
+			return dto.UnggahBerkasResponse{}, ErrAlgoritma
+		}
+
+		ukuranDEK, err := dekSize(namaAlgoritma)
 		if err != nil {
 			return dto.UnggahBerkasResponse{}, err
 		}
-		data, err := utils.Encrypt(alg, kunci, kunci, isi)
+
+		dek, err := utils.GenerateKey(ukuranDEK)
 		if err != nil {
 			return dto.UnggahBerkasResponse{}, err
 		}
-		semua = append(semua, hasilEnkripsi{alg: a, mode: alg, data: data})
+
+		aad := dekAAD(fileID, "berkas", namaAlgoritma)
+		macKey, err := deriveFileMACKey(dek, aad)
+		if err != nil {
+			clear(dek)
+			return dto.UnggahBerkasResponse{}, err
+		}
+
+		data, err := utils.Encrypt(mode, dek, macKey, isi)
+		clear(macKey)
+		if err != nil {
+			clear(dek)
+			return dto.UnggahBerkasResponse{}, err
+		}
+
+		wrapped, err := utils.WrapKey(userKEK, dek, aad)
+		clear(dek)
+		if err != nil {
+			return dto.UnggahBerkasResponse{}, err
+		}
+
+		wrappedBytes, err := utils.MarshalWrappedKey(wrapped)
+		if err != nil {
+			return dto.UnggahBerkasResponse{}, err
+		}
+
+		semua = append(semua, hasilEnkripsi{
+			alg:  namaAlgoritma,
+			mode: mode,
+			data: data,
+			wrap: wrappedBytes,
+		})
 	}
 
 	biodata, err := s.biodataRepo.PastikanBiodata(ctx, userID)
@@ -178,67 +234,90 @@ func (s *BerkasService) Unggah(ctx context.Context, userID uuid.UUID, kode strin
 
 	sekarang := time.Now()
 	berkas := entity.Berkas{
-		BiodataID: biodata.ID, KodeBerkas: kode, NamaAsli: filepath.Base(req.NamaAsli),
-		UkuranByte: int64(len(isi)), TipeMIME: req.TipeMIME,
-		Status: "terunggah", DiunggahPada: &sekarang,
+		BiodataID:    biodata.ID,
+		KodeBerkas:   kode,
+		NamaAsli:     filepath.Base(req.NamaAsli),
+		UkuranByte:   int64(len(isi)),
+		TipeMIME:     req.TipeMIME,
+		Status:       "terunggah",
+		DiunggahPada: &sekarang,
 	}
-	berkas.ID, err = uuid.NewV7()
-	if err != nil {
-		return dto.UnggahBerkasResponse{}, err
-	}
+	berkas.ID = fileID
+
 	folder := filepath.Join(folderPenyimpanan, berkas.ID.String())
 
 	var lama []entity.Berkas
 	res := dto.UnggahBerkasResponse{}
+
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("biodata_id = ? AND kode_berkas = ?", biodata.ID, kode).Find(&lama).Error; err != nil {
+		if err := tx.
+			Where("biodata_id = ? AND kode_berkas = ?", biodata.ID, kode).
+			Find(&lama).Error; err != nil {
 			return err
 		}
+
 		for _, b := range lama {
 			if err := hapusBaris(tx, b.ID); err != nil {
 				return err
 			}
 		}
+
 		if err := tx.Create(&berkas).Error; err != nil {
 			return err
 		}
+
 		if err := os.MkdirAll(folder, 0o700); err != nil {
 			return err
 		}
+
 		for _, h := range semua {
 			isiJSON, err := json.Marshal(h.data)
 			if err != nil {
 				return err
 			}
+
 			jalur := filepath.Join(folder, h.alg+".json")
 			if err := os.WriteFile(jalur, isiJSON, 0o600); err != nil {
 				return err
 			}
+
 			var iv *string
 			if len(h.data.IV) > 0 {
 				v := base64.StdEncoding.EncodeToString(h.data.IV)
 				iv = &v
 			}
+
 			enk := entity.EnkripsiBerkas{
-				BerkasID: berkas.ID, Algoritma: h.alg, Mode: string(h.mode), IV: iv,
-				CiphertextPath: jalur, UkuranCiphertextByte: int64(len(h.data.Ciphertext)),
+				BerkasID:             berkas.ID,
+				Algoritma:            h.alg,
+				Mode:                 string(h.mode),
+				IV:                   iv,
+				CiphertextPath:       jalur,
+				UkuranCiphertextByte: int64(len(h.data.Ciphertext)),
+				WrappedDEK:           h.wrap,
 			}
 			if err := tx.Create(&enk).Error; err != nil {
 				return err
 			}
+
 			res.Enkripsi = append(res.Enkripsi, dto.EnkripsiBerkasResponse{
-				Algoritma: enk.Algoritma, Mode: enk.Mode, UkuranCiphertextByte: enk.UkuranCiphertextByte,
+				Algoritma:            enk.Algoritma,
+				Mode:                 enk.Mode,
+				UkuranCiphertextByte: enk.UkuranCiphertextByte,
 			})
 		}
+
 		return nil
 	})
 	if err != nil {
 		_ = os.RemoveAll(folder)
 		return dto.UnggahBerkasResponse{}, err
 	}
+
 	for _, b := range lama {
 		hapusFolder(b)
 	}
+
 	res.BerkasResponse = keResponse(berkas)
 	return res, nil
 }
@@ -446,61 +525,128 @@ func (s *BerkasService) milikPengguna(ctx context.Context, userID uuid.UUID, raw
 	return b, err
 }
 
-func bacaEnkripsi(b entity.Berkas, algoritma string) (utils.EncryptedData, error) {
+func bacaEnkripsi(
+	b entity.Berkas,
+	algoritma string,
+) (utils.EncryptedData, entity.EnkripsiBerkas, error) {
 	for _, e := range b.Enkripsi {
 		if e.Algoritma != algoritma {
 			continue
 		}
 		isi, err := os.ReadFile(e.CiphertextPath)
 		if err != nil {
-			return utils.EncryptedData{}, err
+			return utils.EncryptedData{}, entity.EnkripsiBerkas{}, err
 		}
 		var data utils.EncryptedData
-		return data, json.Unmarshal(isi, &data)
+		if err := json.Unmarshal(isi, &data); err != nil {
+			return utils.EncryptedData{}, entity.EnkripsiBerkas{}, err
+		}
+		return data, e, nil
 	}
-	return utils.EncryptedData{}, ErrBerkasNotFound
+	return utils.EncryptedData{}, entity.EnkripsiBerkas{}, ErrBerkasNotFound
 }
 
-func (s *BerkasService) Unduh(ctx context.Context, userID uuid.UUID, rawID, algoritma string) (dto.UnduhBerkasResponse, error) {
-	alg, kunci, err := kunciBerkas(algoritma)
-	if err != nil {
-		return dto.UnduhBerkasResponse{}, err
+func (s *BerkasService) Unduh(
+	ctx context.Context,
+	userID uuid.UUID,
+	rawID, algoritma string,
+) (dto.UnduhBerkasResponse, error) {
+	alg, _ := algoritmaDanSecret(algoritma)
+	if alg == "" {
+		return dto.UnduhBerkasResponse{}, ErrAlgoritma
 	}
+
 	b, err := s.milikPengguna(ctx, userID, rawID)
 	if err != nil {
 		return dto.UnduhBerkasResponse{}, err
 	}
-	data, err := bacaEnkripsi(b, algoritma)
+
+	data, metadata, err := bacaEnkripsi(b, algoritma)
 	if err != nil {
 		return dto.UnduhBerkasResponse{}, err
 	}
 	if data.Algorithm != alg {
 		return dto.UnduhBerkasResponse{}, errors.New("metadata ciphertext tidak sesuai")
 	}
-	isi, err := utils.Decrypt(data, kunci, kunci)
-	if err != nil {
-		return dto.UnduhBerkasResponse{}, err
+
+	var isi []byte
+
+	if len(metadata.WrappedDEK) == 0 {
+		// Backward compatibility for files encrypted before per-file DEKs.
+		legacyAlgorithm, legacyKey, err := kunciBerkas(algoritma)
+		if err != nil {
+			return dto.UnduhBerkasResponse{}, err
+		}
+		if legacyAlgorithm != data.Algorithm {
+			return dto.UnduhBerkasResponse{}, errors.New("metadata ciphertext tidak sesuai")
+		}
+
+		isi, err = utils.Decrypt(data, legacyKey, legacyKey)
+		if err != nil {
+			return dto.UnduhBerkasResponse{}, err
+		}
+	} else {
+		userKEK, err := unwrapUserKEK(s.db.WithContext(ctx), userID)
+		if err != nil {
+			return dto.UnduhBerkasResponse{}, err
+		}
+		defer clear(userKEK)
+
+		wrapped, err := utils.UnmarshalWrappedKey(metadata.WrappedDEK)
+		if err != nil {
+			return dto.UnduhBerkasResponse{}, err
+		}
+
+		aad := dekAAD(b.ID, "berkas", algoritma)
+		dek, err := utils.UnwrapKey(userKEK, wrapped, aad)
+		if err != nil {
+			return dto.UnduhBerkasResponse{}, err
+		}
+		defer clear(dek)
+
+		macKey, err := deriveFileMACKey(dek, aad)
+		if err != nil {
+			return dto.UnduhBerkasResponse{}, err
+		}
+		defer clear(macKey)
+
+		isi, err = utils.Decrypt(data, dek, macKey)
+		if err != nil {
+			return dto.UnduhBerkasResponse{}, err
+		}
 	}
+
 	return dto.UnduhBerkasResponse{
-		NamaAsli: b.NamaAsli, TipeMIME: b.TipeMIME, Algoritma: algoritma,
+		NamaAsli:  b.NamaAsli,
+		TipeMIME:  b.TipeMIME,
+		Algoritma: algoritma,
 		IsiBase64: base64.StdEncoding.EncodeToString(isi),
 	}, nil
 }
 
-func (s *BerkasService) Ciphertext(ctx context.Context, userID uuid.UUID, rawID, algoritma string) (dto.CiphertextResponse, error) {
+func (s *BerkasService) Ciphertext(
+	ctx context.Context,
+	userID uuid.UUID,
+	rawID, algoritma string,
+) (dto.CiphertextResponse, error) {
 	if !slices.Contains(algoritmaBerkas, algoritma) {
 		return dto.CiphertextResponse{}, ErrAlgoritma
 	}
+
 	b, err := s.milikPengguna(ctx, userID, rawID)
 	if err != nil {
 		return dto.CiphertextResponse{}, err
 	}
-	data, err := bacaEnkripsi(b, algoritma)
+
+	data, _, err := bacaEnkripsi(b, algoritma)
 	if err != nil {
 		return dto.CiphertextResponse{}, err
 	}
+
 	return dto.CiphertextResponse{
-		BerkasID: b.ID.String(), Algoritma: algoritma, Encoding: "base64",
+		BerkasID:   b.ID.String(),
+		Algoritma:  algoritma,
+		Encoding:   "base64",
 		Ciphertext: base64.StdEncoding.EncodeToString(data.Ciphertext),
 	}, nil
 }

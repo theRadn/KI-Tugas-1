@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 const (
@@ -26,6 +27,7 @@ var (
 
 type DocumentService struct {
 	root string
+	db   *gorm.DB
 }
 
 type documentManifest struct {
@@ -47,8 +49,8 @@ var allowedDocumentExtensions = map[string]bool{
 	".csv":  true,
 }
 
-func NewDocumentService(root string) *DocumentService {
-	return &DocumentService{root: root}
+func NewDocumentService(root string, db *gorm.DB) *DocumentService {
+	return &DocumentService{root: root, db: db}
 }
 
 func (s *DocumentService) Start(
@@ -89,12 +91,18 @@ func (s *DocumentService) Start(
 		return uuid.Nil, 0, err
 	}
 
-	encryptedManifest, err := packVideoData(plainManifest)
+	id, err := uuid.NewV7()
 	if err != nil {
 		return uuid.Nil, 0, err
 	}
 
-	id, err := uuid.NewV7()
+	// Manifest has its own independent DEKs, wrapped using document-specific AAD.
+	encryptedManifest, err := s.packVideoData(
+		plainManifest,
+		userID,
+		id,
+		"document-manifest",
+	)
 	if err != nil {
 		return uuid.Nil, 0, err
 	}
@@ -137,12 +145,18 @@ func (s *DocumentService) PutChunk(
 				int64(index)*MaxDocumentChunkBytes,
 		)
 	}
-
 	if len(chunk) != expected {
 		return ErrInvalidDocument
 	}
 
-	encrypted, err := packVideoData(chunk)
+	// Each chunk receives independent AES, DES, and RC4 DEKs.
+	purpose := fmt.Sprintf("document-chunk:%d", index)
+	encrypted, err := s.packVideoData(
+		chunk,
+		userID,
+		documentID,
+		purpose,
+	)
 	if err != nil {
 		return err
 	}
@@ -163,14 +177,11 @@ func (s *DocumentService) GetChunk(
 	if err != nil {
 		return nil, documentManifest{}, err
 	}
-
 	if index < 0 || index >= manifest.ChunkCount {
 		return nil, documentManifest{}, ErrInvalidDocument
 	}
 
-	data, err := os.ReadFile(
-		s.chunkPath(userID, documentID, index),
-	)
+	data, err := os.ReadFile(s.chunkPath(userID, documentID, index))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, documentManifest{}, ErrDocumentNotFound
 	}
@@ -178,7 +189,14 @@ func (s *DocumentService) GetChunk(
 		return nil, documentManifest{}, err
 	}
 
-	chunk, err := unpackVideoData(data, algorithm)
+	purpose := fmt.Sprintf("document-chunk:%d", index)
+	chunk, err := s.unpackVideoData(
+		data,
+		userID,
+		documentID,
+		purpose,
+		algorithm,
+	)
 	if err != nil {
 		return nil, documentManifest{}, err
 	}
@@ -190,7 +208,6 @@ func (s *DocumentService) GetChunk(
 				int64(index)*MaxDocumentChunkBytes,
 		)
 	}
-
 	if len(chunk) != expected {
 		return nil, documentManifest{}, ErrInvalidDocument
 	}
@@ -211,7 +228,13 @@ func (s *DocumentService) manifest(
 		return documentManifest{}, err
 	}
 
-	data, err = unpackVideoData(data, "AES")
+	data, err = s.unpackVideoData(
+		data,
+		userID,
+		documentID,
+		"document-manifest",
+		"AES",
+	)
 	if err != nil {
 		return documentManifest{}, err
 	}

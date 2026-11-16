@@ -1,8 +1,8 @@
-
 package entity
 
 import (
 	"time"
+
 	"github.com/google/uuid"
 )
 
@@ -25,8 +25,8 @@ type Berkas struct {
 	DiubahPada   time.Time  `gorm:"autoUpdateTime" json:"diubah_pada"`
 }
 
-func (Berkas) TableName() string { 
-	return "berkas" 
+func (Berkas) TableName() string {
+	return "berkas"
 }
 
 type EnkripsiBerkas struct {
@@ -38,8 +38,9 @@ type EnkripsiBerkas struct {
 	Nonce                *string   `gorm:"type:text" json:"nonce,omitempty"`
 	CiphertextPath       string    `gorm:"type:text;not null" json:"ciphertext_path"`
 	UkuranCiphertextByte int64     `gorm:"type:bigint;not null" json:"ukuran_ciphertext_byte"`
+	WrappedDEK           []byte    `json:"-" gorm:"type:blob;not null"`
 }
 
-func (EnkripsiBerkas) TableName() string { 
-	return "enkripsi_berkas" 
+func (EnkripsiBerkas) TableName() string {
+	return "enkripsi_berkas"
 }

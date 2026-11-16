@@ -20,6 +20,18 @@ import (
 
 var BerkasUnready = errors.New("not encrypted yet")
 
+type analysisCipher struct {
+	data       utils.EncryptedData
+	wrappedDEK []byte
+	aad        []byte
+}
+
+type preparedAnalysisCipher struct {
+	data   utils.EncryptedData
+	dek    []byte
+	macKey []byte
+}
+
 type AnalisisService interface {
 	DaftarBerkas(ctx context.Context, userID uuid.UUID) ([]dto.BerkasResponse, error)
 	UjiDekripsi(ctx context.Context, userID uuid.UUID, req dto.UjiDekripsiRequest) (dto.UjiDekripsiResponse, error)
@@ -77,36 +89,61 @@ func (s *analisisService) UjiDekripsi(ctx context.Context, userID uuid.UUID, req
 	response := dto.UjiDekripsiResponse{BerkasID: req.BerkasID, Hasil: make([]dto.HasilAnalisisResponse, 0, 3)}
 	stored := entity.HasilAnalisis{UserID: userID, BerkasID: berkasID, JumlahPercobaan: req.JumlahPercobaan}
 	for _, name := range algoritmaBerkas {
-		algorithm, secret, err := kunciBerkas(name)
-		if err != nil {
-			return dto.UjiDekripsiResponse{}, err
-		}
-		var encrypted []utils.EncryptedData
+		algorithm, _ := algoritmaDanSecret(name)
+
+		var samplesToDecrypt []analysisCipher
 		var ciphertextSize int64
+
 		if potongan {
-			encrypted, ciphertextSize, err = muatPotonganAnalisis(berkas, name, algorithm)
+			samplesToDecrypt, ciphertextSize, err = muatPotonganAnalisis(
+				s.db.WithContext(ctx), berkas, userID, name, algorithm,
+			)
 		} else {
-			encrypted, ciphertextSize, err = muatBerkasAnalisis(berkas, name, algorithm)
+			samplesToDecrypt, ciphertextSize, err = muatBerkasAnalisis(
+				berkas, name, algorithm,
+			)
 		}
 		if err != nil {
-			return dto.UjiDekripsiResponse{}, err
-		}
-		if err := dekripsiAnalisis(encrypted, secret, berkas.UkuranByte); err != nil {
 			return dto.UjiDekripsiResponse{}, err
 		}
 
-		samples := make([]float64, req.JumlahPercobaan)
-		for i := range samples {
-			start := time.Now()
-			if err := dekripsiAnalisis(encrypted, secret, berkas.UkuranByte); err != nil {
+		var userKEK []byte
+		needsKEK := false
+		for _, sample := range samplesToDecrypt {
+			if len(sample.wrappedDEK) != 0 {
+				needsKEK = true
+				break
+			}
+		}
+		if needsKEK {
+			userKEK, err = unwrapUserKEK(s.db.WithContext(ctx), userID)
+			if err != nil {
 				return dto.UjiDekripsiResponse{}, err
 			}
-			samples[i] = float64(time.Since(start).Nanoseconds()) / 1e6
 		}
-		stat := statistikDekripsi(samples, berkas.UkuranByte, ciphertextSize)
+
+		prepared, err := siapkanDekripsiAnalisis(samplesToDecrypt, userKEK, name)
+		if err != nil {
+			return dto.UjiDekripsiResponse{}, err
+		}
+		if err := dekripsiAnalisis(prepared, berkas.UkuranByte); err != nil {
+			return dto.UjiDekripsiResponse{}, err
+		}
+
+		timings := make([]float64, req.JumlahPercobaan)
+		for i := range timings {
+			start := time.Now()
+			if err := dekripsiAnalisis(prepared, berkas.UkuranByte); err != nil {
+				return dto.UjiDekripsiResponse{}, err
+			}
+			timings[i] = float64(time.Since(start).Nanoseconds()) / 1e6
+		}
+
+		stat := statistikDekripsi(timings, berkas.UkuranByte, ciphertextSize)
 		stat.Algoritma = name
 		stat.Mode = string(algorithm)
 		response.Hasil = append(response.Hasil, stat)
+
 		stored.Hasil = append(stored.Hasil, entity.HasilAnalisisAlgoritma{
 			Algoritma: stat.Algoritma, Mode: stat.Mode,
 			RataRataMS: stat.RataRataMs, MedianMS: stat.MedianMs,
@@ -121,11 +158,16 @@ func (s *analisisService) UjiDekripsi(ctx context.Context, userID uuid.UUID, req
 	return response, nil
 }
 
-func muatBerkasAnalisis(berkas entity.Berkas, name string, algorithm utils.Algorithm) ([]utils.EncryptedData, int64, error) {
+func muatBerkasAnalisis(
+	berkas entity.Berkas,
+	name string,
+	algorithm utils.Algorithm,
+) ([]analysisCipher, int64, error) {
 	for _, item := range berkas.Enkripsi {
 		if item.Algoritma != name {
 			continue
 		}
+
 		file, err := os.ReadFile(item.CiphertextPath)
 		if err != nil {
 			return nil, 0, err
@@ -134,72 +176,167 @@ func muatBerkasAnalisis(berkas entity.Berkas, name string, algorithm utils.Algor
 		if err := json.Unmarshal(file, &encrypted); err != nil {
 			return nil, 0, err
 		}
-		if encrypted.Algorithm != algorithm || int64(len(encrypted.Ciphertext)) != item.UkuranCiphertextByte {
+		if encrypted.Algorithm != algorithm ||
+			int64(len(encrypted.Ciphertext)) != item.UkuranCiphertextByte {
 			return nil, 0, errors.New("metadata ciphertext tidak sesuai")
 		}
-		return []utils.EncryptedData{encrypted}, item.UkuranCiphertextByte, nil
+
+		return []analysisCipher{{
+			data:       encrypted,
+			wrappedDEK: item.WrappedDEK,
+			aad:        dekAAD(berkas.ID, "berkas", name),
+		}}, item.UkuranCiphertextByte, nil
 	}
 	return nil, 0, BerkasUnready
 }
 
-func muatPotonganAnalisis(berkas entity.Berkas, name string, algorithm utils.Algorithm) ([]utils.EncryptedData, int64, error) {
+func muatPotonganAnalisis(
+	db *gorm.DB,
+	berkas entity.Berkas,
+	userID uuid.UUID,
+	name string,
+	algorithm utils.Algorithm,
+) ([]analysisCipher, int64, error) {
+	manifestPurpose := "video-manifest"
+	chunkPurpose := func(i int) string {
+		return fmt.Sprintf("video-chunk:%d", i)
+	}
+	if berkas.KodeBerkas == KodeDokumen {
+		manifestPurpose = "document-manifest"
+		chunkPurpose = func(i int) string {
+			return fmt.Sprintf("document-chunk:%d", i)
+		}
+	}
+
 	manifestFile, err := os.ReadFile(filepath.Join(berkas.FilePath, "manifest.json"))
 	if err != nil {
 		return nil, 0, err
 	}
-	manifestPlain, err := unpackVideoData(manifestFile, "AES")
+	manifestPlain, err := unpackEncryptedPayload(
+		db, manifestFile, userID, berkas.ID, manifestPurpose, "AES",
+	)
 	if err != nil {
 		return nil, 0, err
 	}
+
 	var count int
 	if berkas.KodeBerkas == KodeVideo {
 		var manifest videoManifest
-		err = json.Unmarshal(manifestPlain, &manifest)
+		if err := json.Unmarshal(manifestPlain, &manifest); err != nil {
+			return nil, 0, err
+		}
 		count = manifest.ChunkCount
-		if count < 1 || count > maxVideoChunks || manifest.SizeBytes != berkas.UkuranByte {
+		if manifest.SizeBytes != berkas.UkuranByte {
 			return nil, 0, BerkasUnready
 		}
 	} else {
 		var manifest documentManifest
-		err = json.Unmarshal(manifestPlain, &manifest)
+		if err := json.Unmarshal(manifestPlain, &manifest); err != nil {
+			return nil, 0, err
+		}
 		count = manifest.ChunkCount
-		if count < 1 || count > maxDocumentChunks || manifest.SizeBytes != berkas.UkuranByte {
+		if manifest.SizeBytes != berkas.UkuranByte {
 			return nil, 0, BerkasUnready
 		}
 	}
-	if err != nil || count != int((berkas.UkuranByte+MaxVideoChunkBytes-1)/MaxVideoChunkBytes) {
+
+	expectedCount := int(
+		(berkas.UkuranByte + MaxVideoChunkBytes - 1) / MaxVideoChunkBytes,
+	)
+	if count < 1 || count > maxVideoChunks || count != expectedCount {
 		return nil, 0, BerkasUnready
 	}
 
-	encrypted := make([]utils.EncryptedData, 0, count)
+	result := make([]analysisCipher, 0, count)
 	var ciphertextSize int64
+
 	for i := 0; i < count; i++ {
-		file, err := os.ReadFile(filepath.Join(berkas.FilePath, fmt.Sprintf("%06d.json", i)))
+		file, err := os.ReadFile(filepath.Join(
+			berkas.FilePath, fmt.Sprintf("%06d.json", i),
+		))
 		if err != nil {
 			return nil, 0, err
 		}
-		var versions map[string]utils.EncryptedData
+
+		var versions map[string]storedVideoCipher
 		if err := json.Unmarshal(file, &versions); err != nil {
 			return nil, 0, err
 		}
-		data, ok := versions[name]
-		expected := MaxVideoChunkBytes
+
+		version, ok := versions[name]
+		expectedSize := MaxVideoChunkBytes
 		if i == count-1 {
-			expected = int(berkas.UkuranByte - int64(i)*MaxVideoChunkBytes)
+			expectedSize = int(
+				berkas.UkuranByte - int64(i)*MaxVideoChunkBytes,
+			)
 		}
-		if !ok || len(versions) != 3 || data.Algorithm != algorithm || len(data.Ciphertext) != expected {
+		if !ok || len(versions) != 3 ||
+			version.Algorithm != algorithm ||
+			len(version.Ciphertext) != expectedSize {
 			return nil, 0, BerkasUnready
 		}
-		encrypted = append(encrypted, data)
-		ciphertextSize += int64(len(data.Ciphertext))
+
+		result = append(result, analysisCipher{
+			data:       version.EncryptedData,
+			wrappedDEK: version.WrappedDEK,
+			aad:        dekAAD(berkas.ID, chunkPurpose(i), name),
+		})
+		ciphertextSize += int64(len(version.Ciphertext))
 	}
-	return encrypted, ciphertextSize, nil
+
+	return result, ciphertextSize, nil
 }
 
-func dekripsiAnalisis(encrypted []utils.EncryptedData, secret []byte, expectedSize int64) error {
+func siapkanDekripsiAnalisis(
+	samples []analysisCipher,
+	userKEK []byte,
+	name string,
+) ([]preparedAnalysisCipher, error) {
+	prepared := make([]preparedAnalysisCipher, 0, len(samples))
+
+	for _, sample := range samples {
+		var dek, macKey []byte
+
+		if len(sample.wrappedDEK) == 0 {
+			// Legacy records used their environment key as both DEK and MAC key.
+			_, legacyKey, err := kunciBerkas(name)
+			if err != nil {
+				return nil, err
+			}
+			dek = legacyKey
+			macKey = legacyKey
+		} else {
+			wrapped, err := utils.UnmarshalWrappedKey(sample.wrappedDEK)
+			if err != nil {
+				return nil, err
+			}
+			dek, err = utils.UnwrapKey(userKEK, wrapped, sample.aad)
+			if err != nil {
+				return nil, err
+			}
+			macKey, err = deriveFileMACKey(dek, sample.aad)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		prepared = append(prepared, preparedAnalysisCipher{
+			data:   sample.data,
+			dek:    dek,
+			macKey: macKey,
+		})
+	}
+
+	return prepared, nil
+}
+
+func dekripsiAnalisis(
+	encrypted []preparedAnalysisCipher,
+	expectedSize int64,
+) error {
 	var total int64
-	for _, data := range encrypted {
-		plaintext, err := utils.Decrypt(data, secret, secret)
+	for _, sample := range encrypted {
+		plaintext, err := utils.Decrypt(sample.data, sample.dek, sample.macKey)
 		if err != nil {
 			return err
 		}

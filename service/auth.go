@@ -66,10 +66,41 @@ func (s *AuthService) Daftar(
 		return nil, err
 	}
 
+	id, err := uuid.NewV7()
+	if err != nil {
+		return nil, err
+	}
+
+	masterKEK, err := utils.MasterKEK()
+	if err != nil {
+		return nil, err
+	}
+
+	userKEK, err := utils.GenerateKey(32)
+	if err != nil {
+		return nil, err
+	}
+
+	wrapped, err := utils.WrapKey(
+		masterKEK,
+		userKEK,
+		[]byte("user:"+id.String()+":kek"),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	wrappedBytes, err := utils.MarshalWrappedKey(wrapped)
+	if err != nil {
+		return nil, err
+	}
+
 	user := &entity.User{
+		BaseModel:     entity.BaseModel{ID: id},
 		NamaPengguna:  req.NamaPengguna,
 		Email:         req.Email,
 		KataSandiHash: string(hash),
+		KEKWrapped:    wrappedBytes,
 	}
 
 	if err := s.repo.Create(ctx, user); err != nil {

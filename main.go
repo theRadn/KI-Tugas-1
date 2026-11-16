@@ -24,6 +24,7 @@ func main() {
 	}
 
 	migrateFlag := flag.Bool("migrate", false, "Run database migrations")
+	resetFlag := flag.Bool("reset", false, "Reset the database")
 	flag.Parse()
 	hasTaskRun := false
 
@@ -32,6 +33,11 @@ func main() {
 
 	if *migrateFlag {
 		runMigrations(db)
+		hasTaskRun = true
+	}
+
+	if *resetFlag {
+		runReset(db)
 		hasTaskRun = true
 	}
 
@@ -48,10 +54,10 @@ func main() {
 	analisisService := service.NewAnalisisService(db)
 	analisisController := controller.NewAnalisisController(analisisService)
 	videoController := controller.NewVideoController(
-		service.NewVideoService("storage/videos"),
+		service.NewVideoService("storage/videos", db),
 		service.NewBerkasService(db),
 	)
-	documentService := service.NewDocumentService("storage/documents")
+	documentService := service.NewDocumentService("storage/documents", db)
 	documentController := controller.NewDocumentController(documentService, service.NewBerkasService(db))
 
 	globalLimiter, err := middleware.NewIPRateLimiter(
@@ -144,4 +150,8 @@ func main() {
 
 func runMigrations(db *gorm.DB) {
 	migration.Migrate(db)
+}
+
+func runReset(db *gorm.DB) {
+	migration.ResetDatabase(db)
 }
