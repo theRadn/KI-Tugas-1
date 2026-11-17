@@ -30,6 +30,7 @@ func Migrate(db *gorm.DB) {
 
 	err := db.AutoMigrate(
 		&entity.User{},
+		&entity.EncryptionKeySet{},
 		&entity.Biodata{},
 		&entity.Pendidikan{},
 		&entity.NilaiTKA{},
@@ -65,6 +66,7 @@ func ResetDatabase(db *gorm.DB) {
 		&entity.NilaiTKA{},
 		&entity.Pendidikan{},
 		&entity.Biodata{},
+		&entity.EncryptionKeySet{},
 		&entity.User{},
 	)
 	if err != nil {

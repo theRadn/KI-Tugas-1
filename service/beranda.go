@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/theRadn/KI-Tugas-1/dto"
 	"github.com/theRadn/KI-Tugas-1/entity"
+	"github.com/theRadn/KI-Tugas-1/repository"
 	"gorm.io/gorm"
 )
 
@@ -16,11 +17,15 @@ type BerandaService interface {
 }
 
 type berandaService struct {
-	db *gorm.DB
+	db          *gorm.DB
+	biodataRepo *repository.BiodataRepository
 }
 
 func NewBerandaService(db *gorm.DB) BerandaService {
-	return &berandaService{db: db}
+	return &berandaService{
+		db:          db,
+		biodataRepo: repository.NewBiodataRepository(db),
+	}
 }
 
 func (s *berandaService) Get(ctx context.Context, userID uuid.UUID) (dto.BerandaResponse, error) {
@@ -31,11 +36,8 @@ func (s *berandaService) Get(ctx context.Context, userID uuid.UUID) (dto.Beranda
 
 	// bagian-bagian biodata yang harus dicek kelengkapannya
 	response := dto.BerandaResponse{NamaPengguna: user.NamaPengguna}
-	var biodata entity.Biodata
-	if err := s.db.WithContext(ctx).
-		Preload("Pendidikan").Preload("Keluarga").Preload("Rumah").
-		Preload("CatatanKhusus").Preload("PendukungEkonomi").
-		First(&biodata, "user_id = ?", userID).Error; err != nil {
+	biodata, err := s.biodataRepo.Get(ctx, userID)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.KelengkapanData = daftarBagian(nil)
 			return response, nil
@@ -45,7 +47,7 @@ func (s *berandaService) Get(ctx context.Context, userID uuid.UUID) (dto.Beranda
 
 	// kalau biodata ditemukan, isi data yang relevan ke response
 	response.NoPendaftaran = biodata.NoPendaftaran
-	response.KelengkapanData = daftarBagian(&biodata)
+	response.KelengkapanData = daftarBagian(biodata)
 	var totals struct {
 		JumlahBerkas    int64
 		TotalUkuranByte int64
