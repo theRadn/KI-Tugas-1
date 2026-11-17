@@ -100,11 +100,11 @@ func (s *VideoService) Start(userID uuid.UUID, chunkCount int, sizeBytes int64) 
 	if err != nil {
 		return uuid.Nil, err // ini banyak error handling biar file selanjutnya ga korup
 	}
-	data, err := s.packVideoData(manifest, userID, uuid.Nil, "video-manifest")
+	id, err := uuid.NewV7()
 	if err != nil {
 		return uuid.Nil, err
 	}
-	id, err := uuid.NewV7()
+	data, err := s.packVideoData(manifest, userID, id, "video-manifest")
 	if err != nil {
 		return uuid.Nil, err
 	}
