@@ -31,13 +31,13 @@ func main() {
 	db := config.SetUpDatabaseConnection()
 	defer config.CloseDatabaseConnection(db)
 
-	if *migrateFlag {
-		runMigrations(db)
+	if *resetFlag {
+		runReset(db)
 		hasTaskRun = true
 	}
 
-	if *resetFlag {
-		runReset(db)
+	if *migrateFlag {
+		runMigrations(db)
 		hasTaskRun = true
 	}
 
