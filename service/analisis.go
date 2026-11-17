@@ -199,7 +199,7 @@ func muatPotonganAnalisis(
 ) ([]analysisCipher, int64, error) {
 	manifestPurpose := "video-manifest"
 	chunkPurpose := func(i int) string {
-		return fmt.Sprintf("video-chunk:%d", i)
+		return fmt.Sprintf("chunk:%d", i)
 	}
 	if berkas.KodeBerkas == KodeDokumen {
 		manifestPurpose = "document-manifest"
