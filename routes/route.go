@@ -46,6 +46,7 @@ func SetupRoutes(router *gin.Engine, db *gorm.DB, sessionManager *middleware.Ses
 		RegisterBerkasRoutes(encrypted, db)
 		Beranda(encrypted, berandaController)
 		Analisis(encrypted, analisisController)
+		RegisterBerbagiRoutes(encrypted, db)
 
 		// Video diunggah dan diunduh per potongan (maks 512 KB) agar muat
 		// di amplop enkripsi in-transit.

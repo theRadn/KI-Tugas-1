@@ -42,8 +42,10 @@ func Migrate(db *gorm.DB) {
 		&entity.EnkripsiBerkas{},
 		&entity.HasilAnalisis{},
 		&entity.HasilAnalisisAlgoritma{},
+		&entity.PermintaanBerbagi{},
+		&entity.PermintaanBerbagi{},
+		&entity.KunciBerbagi{},
 	)
-
 	if err != nil {
 		log.Fatalf("Migration failed: %v", err)
 	}
@@ -68,6 +70,9 @@ func ResetDatabase(db *gorm.DB) {
 		&entity.Biodata{},
 		&entity.EncryptionKeySet{},
 		&entity.User{},
+		&entity.PermintaanBerbagi{},
+		&entity.PermintaanBerbagi{},
+		&entity.KunciBerbagi{},
 	)
 	if err != nil {
 		log.Fatalf("Failed to reset database: %v", err)
