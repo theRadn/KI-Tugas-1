@@ -46,6 +46,7 @@ type BerbagiService interface {
 	Detail(ctx context.Context, userID, id uuid.UUID) (dto.PermintaanBerbagiResponse, error)
 	Jawab(ctx context.Context, pemilikID, id uuid.UUID, req dto.JawabPermintaanBerbagiRequest) error
 	Cabut(ctx context.Context, pemilikID, id uuid.UUID) error
+	KirimKunci(ctx context.Context, pengirimID uuid.UUID, req dto.KirimKunciRequest) error
 	LihatBiodata(ctx context.Context, pemintaID, id uuid.UUID, tab string) (any, error)
 	LihatBerkas(ctx context.Context, pemintaID, id, berkasID uuid.UUID) (dto.UnduhBerkasResponse, error)
 	LihatChunk(ctx context.Context, pemintaID, id, berkasID uuid.UUID, index int) (dto.BerbagiChunkResponse, error)
@@ -520,6 +521,47 @@ func (s *berbagiService) Cabut(ctx context.Context, pemilikID, id uuid.UUID) err
 			Where("id = ?", id).
 			Update("status", entity.StatusBerbagiDicabut).Error
 	})
+}
+
+// ---------- Kirim kunci lewat Gmail ----------
+
+// KirimKunci mengirim paket kunci ke email penerima. Paket sudah dienkripsi
+// dengan kunci publik penerima di peramban, jadi server dan Gmail hanya
+// melihat ciphertext; hanya kunci pribadi penerima yang bisa membukanya.
+func (s *berbagiService) KirimKunci(
+	ctx context.Context,
+	pengirimID uuid.UUID,
+	req dto.KirimKunciRequest,
+) error {
+	penerima, err := s.repo.ByUsername(ctx, req.NamaPenggunaPenerima)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrBerbagiTidakDitemukan
+		}
+		return err
+	}
+	if penerima.ID == pengirimID {
+		return ErrBerbagiDiriSendiri
+	}
+
+	var pengirim entity.User
+	if err := s.db.WithContext(ctx).First(&pengirim, "id = ?", pengirimID).Error; err != nil {
+		return err
+	}
+
+	isi := fmt.Sprintf(
+		"Halo %s,\n\n"+
+			"%s membagikan data SIPMABA kepada Anda.\n"+
+			"Di bawah ini paket kunci yang sudah dienkripsi dengan kunci publik Anda.\n"+
+			"Salin seluruh paket lalu tempel di halaman Masukkan Kunci pada SIPMABA.\n\n"+
+			"Sidik kunci: %s\n\n%s\n",
+		penerima.NamaPengguna, pengirim.NamaPengguna, req.Sidik, req.Paket,
+	)
+
+	if err := utils.KirimEmail(penerima.Email, "Paket kunci SIPMABA", isi); err != nil {
+		return fmt.Errorf("gagal mengirim email: %w", err)
+	}
+	return nil
 }
 
 // ---------- Daftar & detail ----------

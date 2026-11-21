@@ -15,6 +15,7 @@ func RegisterBerbagiRoutes(r *gin.RouterGroup, db *gorm.DB) {
 	g.POST("", berbagiHandler.Buat)
 	g.GET("/masuk", berbagiHandler.DaftarMasuk)
 	g.GET("/keluar", berbagiHandler.DaftarKeluar)
+	g.POST("/kirim-kunci", berbagiHandler.KirimKunci)
 	g.GET("/:id", berbagiHandler.Detail)
 	g.POST("/:id/jawab", berbagiHandler.Jawab)
 	g.POST("/:id/cabut", berbagiHandler.Cabut)

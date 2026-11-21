@@ -18,6 +18,13 @@ type JawabPermintaanBerbagiRequest struct {
 	Pesan      string   `json:"pesan"`
 }
 
+// Paket = kunci simetris yang sudah dienkripsi dengan kunci publik penerima.
+type KirimKunciRequest struct {
+	NamaPenggunaPenerima string `json:"nama_pengguna_penerima" binding:"required"`
+	Paket                string `json:"paket" binding:"required,base64,max=2000"`
+	Sidik                string `json:"sidik" binding:"max=50"`
+}
+
 type PermintaanBerbagiResponse struct {
 	ID               string     `json:"id"`
 	PemintaID        string     `json:"peminta_id"`

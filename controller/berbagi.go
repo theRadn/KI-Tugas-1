@@ -20,7 +20,7 @@ func NewBerbagiController(svc service.BerbagiService) *BerbagiController {
 }
 
 func userIDDariContext(c *gin.Context) (uuid.UUID, bool) {
-	raw := c.GetString("user_id")
+	raw := c.GetString("userID")
 	if raw == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return uuid.Nil, false
@@ -158,6 +158,24 @@ func (h *BerbagiController) Cabut(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "dicabut"})
+}
+
+// POST /api/berbagi/kirim-kunci
+func (h *BerbagiController) KirimKunci(c *gin.Context) {
+	userID, ok := userIDDariContext(c)
+	if !ok {
+		return
+	}
+	var req dto.KirimKunciRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.svc.KirimKunci(c.Request.Context(), userID, req); err != nil {
+		mapBerbagiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Paket kunci terkirim ke email penerima"})
 }
 
 // GET /api/berbagi/:id/biodata/:tab
